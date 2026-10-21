@@ -622,7 +622,7 @@ class WebUISettingsRouter:
             return self._error_response(500, "MCP OAuth callback is not configured")
         query = self._parse_mcp_settings_query(request)
         try:
-            name, cfg = await asyncio.to_thread(
+            name, cfg, network = await asyncio.to_thread(
                 self.settings.mutate,
                 ensure_mcp_oauth_server,
                 query,
@@ -634,6 +634,7 @@ class WebUISettingsRouter:
                 cfg,
                 redirect_uri,
                 reload_mcp=self._reload_mcp_runtime,
+                network=network,
                 reset_credentials=reset,
             )
         except Exception as exc:

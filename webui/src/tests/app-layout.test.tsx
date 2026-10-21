@@ -121,7 +121,7 @@ function baseSettingsPayload() {
     },
     web: {
       enable: true,
-      proxy: null,
+      use_proxy: false,
       user_agent: null,
       search: { max_results: 5, timeout: 30 },
       fetch: { use_jina_reader: true },
@@ -3373,7 +3373,7 @@ describe("App layout", () => {
               },
               web: {
                 enable: true,
-                proxy: null,
+                use_proxy: false,
                 user_agent: null,
                 search: { max_results: 5, timeout: 30 },
                 fetch: { use_jina_reader: true },

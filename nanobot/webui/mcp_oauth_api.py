@@ -15,6 +15,7 @@ from urllib.parse import SplitResult, parse_qs, urlsplit, urlunsplit
 from nanobot.agent.tools.mcp import MCPConnection, connect_mcp_servers
 from nanobot.agent.tools.mcp_oauth import MCP_OAUTH_CALLBACK_PATH, MCPOAuthHandlers
 from nanobot.agent.tools.registry import ToolRegistry
+from nanobot.config.network import NetworkConfig
 from nanobot.config.schema import MCPServerConfig
 from nanobot.security.network import validate_url_target
 from nanobot.webui.http_utils import is_loopback_host
@@ -43,6 +44,7 @@ class _McpOAuthFlow:
     flow_id: str
     name: str
     cfg: MCPServerConfig
+    network: NetworkConfig
     redirect_uri: str
     manual_callback: bool
     expires_at: float
@@ -111,6 +113,7 @@ class McpOAuthManager:
         redirect_uri: str,
         *,
         reload_mcp: McpReload,
+        network: NetworkConfig | None = None,
         reset_credentials: bool = False,
     ) -> dict[str, Any]:
         self._prune()
@@ -122,7 +125,8 @@ class McpOAuthManager:
         flow = _McpOAuthFlow(
             flow_id=secrets.token_urlsafe(24),
             name=name,
-            cfg=cfg,
+            cfg=cfg.model_copy(deep=True),
+            network=(network or NetworkConfig()).model_copy(deep=True),
             redirect_uri=redirect_uri,
             manual_callback=manual_callback,
             expires_at=now + _FLOW_TTL_S,
@@ -302,6 +306,7 @@ class McpOAuthManager:
                 {flow.name: flow.cfg},
                 ToolRegistry(),
                 oauth_handlers={flow.name: handlers},
+                network=flow.network,
             )
             if flow.name not in connections:
                 await self._close_connections(connections)
