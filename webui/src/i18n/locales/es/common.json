@@ -479,6 +479,7 @@
       "byok": "BYOK",
       "overview": "Resumen",
       "appearance": "Apariencia",
+      "notifications": "Notificaciones",
       "models": "Modelos",
       "providers": "Proveedores",
       "image": "Imagen",
@@ -516,6 +517,41 @@
       "hostSafety": "Seguridad de la app",
       "voiceInput": "Transcripción"
     },
+    "notifications": {
+      "scope": "Este navegador",
+      "intro": "Elige cómo recibir avisos cuando termine una tarea.",
+      "pageRequired": "No recibirás nuevos avisos si esta página está cerrada, suspendida o desconectada.",
+      "revoked": "Se ha revocado el permiso de notificaciones y se han desactivado los avisos. Permite las notificaciones en los ajustes de este sitio en el navegador y luego actívalas aquí.",
+      "retry": "Volver a comprobar",
+      "statusOff": "Desactivadas",
+      "statusPermission": "Permiso necesario",
+      "statusOn": "Activadas",
+      "statusBlocked": "Bloqueadas",
+      "statusRevoked": "Permiso revocado",
+      "statusUnavailable": "No disponibles",
+      "statusWorker": "Aún no está listo",
+      "statusBusy": "Comprobando…",
+      "statusError": "No se pudo enviar",
+      "test": "Probar notificaciones",
+      "testBody": "Esta es una notificación de prueba.",
+      "waiting": "Esperando al navegador…",
+      "insecure": "Abre nanobot por HTTPS o en localhost para usar las notificaciones.",
+      "unsupported": "Este navegador no admite notificaciones. Prueba otro; en iPhone o iPad, abre nanobot desde la pantalla de inicio.",
+      "denied": "Las notificaciones están bloqueadas. Permítelas en los ajustes de este sitio en el navegador y luego actívalas aquí.",
+      "dismissed": "No se concedió permiso. Activa las notificaciones y elige Permitir.",
+      "permissionFailed": "No se pudo solicitar permiso. Vuelve a intentarlo en un navegador compatible.",
+      "workerUnavailable": "El servicio de notificaciones no está listo. Vuelve a comprobarlo o recarga esta página.",
+      "displayFailed": "El navegador no pudo enviar la notificación. Comprueba los permisos del sitio y vuelve a intentarlo.",
+      "submitted": "Enviada al navegador. Si no aparece, comprueba las notificaciones del sistema y el modo No molestar.",
+      "completed": "Tarea completada. Haz clic para ver el resultado.",
+      "failed": "La tarea falló. Haz clic para ver los detalles.",
+      "interrupted": "La tarea necesita atención. Haz clic para continuar."
+    },
+    "readingTextSize": {
+      "small": "Texto de lectura pequeño",
+      "standard": "Texto de lectura estándar",
+      "large": "Texto de lectura grande"
+    },
     "rows": {
       "theme": "Tema",
       "language": "Idioma",
@@ -529,6 +565,7 @@
       "pendingChanges": "Cambios pendientes",
       "selectedPreset": "Preajuste seleccionado",
       "presetModel": "Modelo del preajuste",
+      "readingTextSize": "Tamaño del texto de lectura",
       "activityMode": "Detalles de actividad",
       "fileEditDisplay": "Vista previa de cambios",
       "codeWrap": "Ajuste de línea del código",
@@ -550,7 +587,7 @@
       "webuiDefaultAccess": "Acceso predeterminado",
       "currentModel": "Configuración actual",
       "brandLogos": "Logos de marca",
-      "browserNotifications": "Notificaciones de tareas",
+      "browserNotifications": "Notificaciones del navegador",
       "notificationSound": "Sonido al finalizar",
       "cliAppsCatalog": "Catálogo",
       "cliAppsFilter": "Filtro",
@@ -594,8 +631,8 @@
       "selectedModelProvider": "Definido por el modelo seleccionado.",
       "selectedModelValue": "Definido por el modelo seleccionado.",
       "brandLogos": "Muestra los logos de proveedores y apps en Ajustes.\n\nMuestra logos de proveedores de terceros y CLI en Ajustes.",
-      "browserNotifications": "Notifica cuando la página está en segundo plano. Desactivado por defecto.",
-      "notificationSound": "Suena al terminar las respuestas. Desactivado por defecto.\n\nReproduce un breve sonido cuando termina un turno, incluso si esta página está en segundo plano. Desactivado por defecto.",
+      "browserNotifications": "Recibe avisos del estado de las tareas con esta página en segundo plano.",
+      "notificationSound": "Reproduce un sonido al terminar una respuesta, incluso en segundo plano.",
       "cliAppsCatalog": "Instala herramientas CLI para nanobot; las apps de escritorio no cambian.\n\nInstala las herramientas de línea de comandos que nanobot puede usar en este equipo. Las aplicaciones de escritorio no se modifican.",
       "cliAppsFilter": "Busca por nombre, categoría o función.",
       "logs": "Abre la carpeta de registros del motor de la app de escritorio.",
@@ -1962,8 +1999,8 @@
     "loadEarlier": "Cargar mensajes anteriores",
     "history": {
       "loading": "Cargando mensajes anteriores…",
-      "error": "Error al cargar.",
-      "retry": "Reintentar"
+      "exhausted": "No hay mensajes anteriores",
+      "retryLabel": "Error al cargar. Reintentar"
     },
     "forkedFromHistory": "Bifurcado desde el historial",
     "promptNavigator": {
@@ -2346,6 +2383,8 @@
       "body": "El gateway rechazó este mensaje. Revisa el texto o los archivos adjuntos e inténtalo de nuevo."
     },
     "modelRequestFailed": {
+      "authenticationTitle": "Falló la autorización del proveedor del modelo",
+      "authenticationBody": "Vuelve a iniciar sesión o revisa la clave API en los ajustes del modelo.",
       "billingTitle": "La cuota del proveedor del modelo no está disponible",
       "billingBody": "Añade crédito o revisa la facturación de la cuenta del proveedor y vuelve a intentarlo.",
       "connectionTitle": "No se pudo conectar con el proveedor del modelo",
@@ -2353,8 +2392,8 @@
       "rateLimitTitle": "Se alcanzó el límite de solicitudes del proveedor del modelo",
       "serverTitle": "Error del servicio del proveedor del modelo",
       "unknownTitle": "La solicitud al proveedor del modelo falló",
-      "bodyWithAttempt": "La solicitud siguió fallando en el intento {{attempts}}, por lo que se detuvieron los reintentos. Revisa la configuración o el estado del proveedor y vuelve a intentarlo.",
-      "body": "Revisa la configuración o el estado del proveedor y vuelve a intentarlo."
+      "bodyWithAttempt": "Se detuvo tras {{attempts}} intentos. Inténtalo más tarde o elige otro modelo.",
+      "body": "Inténtalo más tarde o elige otro modelo."
     }
   },
   "workspace": {

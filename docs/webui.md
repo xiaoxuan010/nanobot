@@ -119,6 +119,8 @@ To use work from another topic, mention it with `@` and tell nanobot what you ne
 
 The message timeline shows replies and agent activity. Expand the **Worked for** section to inspect the reasoning and tool activity for a completed turn.
 
+To load earlier messages, scroll past the oldest loaded message, or pull down far enough and release on touch devices. The muted loading indicator settles into view while the request runs. When loading succeeds, the indicator and its temporary space disappear and normal message spacing returns. If loading fails, the blocks turn red; hover for error details, then pull again or select the red blocks to retry. If there are no earlier messages, pulling at the real history boundary briefly shows **No earlier messages**.
+
 If the connection drops, the host control shows **Reconnecting**. Tasks in persistent topics can continue during the interruption. After reconnecting, task indicators and completed replies update automatically, including topics you have switched away from. Some text generated while disconnected may appear only after the task finishes. [Temporary chats](#temporary-chats) end when their connection is lost.
 
 When the agent writes or edits files, the activity item shows the target path, status, and changed line counts. Choose **Settings → Appearance → File edit display** to control the detail: **Summary** shows the change summary, **Diff** shows available unified patches inline, and **Collapsed diff** lets you expand them with **View diff**. Large diffs may hide unchanged lines or truncate the inline preview. Select the filename in the activity row to open the read-only file preview panel.
@@ -152,6 +154,10 @@ On touch devices, preview tab controls and the full-screen image viewer's close 
 Open the context indicator beside the composer model badge to see how much of the model's context window is in use. The **Recent rounds** chart shows input tokens for each logical model round, including tool-call rounds. Hover or focus a bar for input tokens, output tokens, generation time, and the KV cache hit rate when reported. Provider usage may be estimated or unavailable; these figures are not a billing statement.
 
 When nanobot compacts context, the timeline shows its progress and outcome. The model continues with a summary and any messages after it; messages covered by the summary remain in your chat history but are no longer sent to the model verbatim. Use `/compact` to compact the current topic's context manually. See [Memory](./memory.md) for compaction and Dream consolidation.
+
+### Model failures
+
+After a model request fails and automatic retries stop, the WebUI shows the failure category. Use **Continue** to resume from the saved conversation, or open model settings to change the model or correct its authorization. Review completed work before continuing: saved tool results are retained, but the model can choose to call tools again. Continuing does not resend the original message. Sending a new message or dismissing the notice clears the pending decision. Saved recovery decisions remain available after a refresh or gateway restart; temporary chats still follow their normal lifetime.
 
 ### Delegated work
 
@@ -294,7 +300,7 @@ Settings is the control surface for browser-local and gateway-backed runtime con
 
 Some settings take effect immediately. Runtime settings that affect the gateway or agent process may require a restart; the WebUI shows that requirement next to the relevant control.
 
-Browser-only display preferences, such as file edit display mode, take effect immediately for the current browser and do not change gateway configuration.
+Browser-only display preferences take effect immediately and persist in the current browser. In **Appearance → Local preferences**, **Reading text size** offers three A buttons: small, standard (default), and large. They adjust conversation text, Markdown and code, with a coordinated message input size; navigation and toolbars keep their interface size. Browser zoom remains available. These preferences, including file edit display mode, do not change gateway configuration.
 
 To add a model, follow [Configure Your Model](./quick-start.md#2-configure-your-model).
 

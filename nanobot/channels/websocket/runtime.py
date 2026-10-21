@@ -13,7 +13,7 @@ from contextlib import suppress
 from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Self, TypeGuard, cast
+from typing import TYPE_CHECKING, Any, Self, TypeGuard, cast
 from urllib.parse import urlsplit, urlunsplit
 from weakref import WeakSet
 
@@ -30,6 +30,7 @@ from nanobot.bus.queue import MessageBus
 from nanobot.channels.base import BaseChannel
 from nanobot.channels.websocket.binary_http import BinaryHTTPBridge
 from nanobot.config_base import Base
+from nanobot.session.display_history import HISTORY_GENERATION_METADATA_KEY
 from nanobot.session.webui_turns import (
     clear_websocket_turn_if_current,
     mark_websocket_turn_transcript_persistence_failed,
@@ -57,7 +58,7 @@ from nanobot.webui.outbound_wire import (
     WebUIWirePersistence,
     project_tool_events,
 )
-from nanobot.webui.session_identity import is_valid_webui_chat_id, webui_session_key
+from nanobot.webui.session_identity import is_valid_webui_chat_id
 from nanobot.webui.transcript import WEBUI_TRANSCRIPT_INCOMPLETE_KEY
 from nanobot.webui.websocket_logging import websockets_server_logger
 
@@ -647,9 +648,12 @@ class WebSocketChannel(BaseChannel):
                         "WebSocket listener is no longer accepting connections"
                     )
 
-    async def _close_server(self, server: Server, socket_path: str) -> None:
+    async def _close_server(
+        self, server: Server, socket_path: str, bridge: BinaryHTTPBridge,
+    ) -> None:
         server.close()
         try:
+            await bridge.shutdown()
             await server.wait_closed()
         except OSError as exc:
             self.logger.warning("WebSocket server close failed: {}", exc)
@@ -681,6 +685,7 @@ class WebSocketChannel(BaseChannel):
             )
 
     async def start(self) -> None:
+        await self._transcripts.initialize()
         self.gateway.http.remote_instances.resume()
         from nanobot.utils.logging_bridge import redirect_lib_logging
 
@@ -702,8 +707,6 @@ class WebSocketChannel(BaseChannel):
         async def handler(connection: ServerConnection) -> None:
             await self._connection_loop(connection)
 
-        bridge = BinaryHTTPBridge(self._uploads.handle)
-
         async def prune_uploads() -> None:
             while not stop_event.is_set():
                 self._uploads.store.prune()
@@ -719,6 +722,7 @@ class WebSocketChannel(BaseChannel):
             failures = 0
             while not stop_event.is_set():
                 server: Server | None = None
+                bridge = BinaryHTTPBridge(self._uploads.handle)
                 was_serving = False
                 started_at = 0.0
                 try:
@@ -798,7 +802,9 @@ class WebSocketChannel(BaseChannel):
                 finally:
                     self._running = False
                     if server is not None:
-                        await self._close_server(server, socket_path)
+                        await self._close_server(server, socket_path, bridge)
+                    else:
+                        await bridge.shutdown()
                     if self._server is server:
                         self._server = None
 
@@ -809,7 +815,6 @@ class WebSocketChannel(BaseChannel):
         finally:
             prune_task.cancel()
             await asyncio.gather(prune_task, return_exceptions=True)
-            await bridge.shutdown()
             self._uploads.store.clear()
             self._running = False
             if self._server_task is task:
@@ -1117,32 +1122,7 @@ class WebSocketChannel(BaseChannel):
         # Give an idle writer a chance to start without waiting for physical I/O.
         await asyncio.sleep(0)
 
-    async def _persist_owned_event(
-        self, chat_id: str, event: dict[str, Any], metadata: dict[str, Any] | None,
-        write: Callable[[], bool],
-    ) -> bool:
-        from nanobot.webui.history_replacement import transcript_access
-
-        generation = (metadata or {}).get("_webui_history_generation") or self._outbound_generation.get()
-        if generation:
-            event["history_generation"] = generation
-
-        def commit() -> bool:
-            with transcript_access(webui_session_key(chat_id)):
-                if generation and self.gateway.session_manager is not None:
-                    current = self.gateway.session_manager.state.peek_identity(webui_session_key(chat_id))
-                    if current is None or current.generation != generation:
-                        return False
-                return write()
-        return await asyncio.to_thread(commit)
-
-    async def _persist_turn_transcript_event(self, chat_id: str, event: dict[str, Any], **kwargs: Any) -> bool:
-        return await self._persist_owned_event(
-            chat_id, event, kwargs.get("metadata"),
-            lambda: self._write_turn_transcript_event(chat_id, event, **kwargs),
-        )
-
-    def _write_turn_transcript_event(
+    async def _persist_turn_transcript_event(
         self,
         chat_id: str,
         event: dict[str, Any],
@@ -1153,7 +1133,7 @@ class WebSocketChannel(BaseChannel):
         transcript_overrides: dict[str, Any] | None = None,
     ) -> bool:
         """Persist one canonical turn event and retain unsafe owners on failure."""
-        if generation := self._outbound_generation.get():
+        if generation := (metadata or {}).get(HISTORY_GENERATION_METADATA_KEY) or self._outbound_generation.get():
             event["history_generation"] = generation
         if (
             (metadata or {}).get(WEBUI_RESTART_CONTROL_METADATA_KEY) is True
@@ -1163,7 +1143,7 @@ class WebSocketChannel(BaseChannel):
                 chat_id, event, metadata=metadata, phase=phase, include_source=include_source,
             )
             return True
-        persisted = self._transcripts.prepare_and_append(
+        persisted = await self._transcripts.prepare_and_append(
             chat_id,
             event,
             metadata=metadata,
@@ -1194,20 +1174,7 @@ class WebSocketChannel(BaseChannel):
             )
         return persisted
 
-    async def _persist_turn_stream_event(self, chat_id: str, event: dict[str, Any], **kwargs: Any) -> bool:
-        # Deltas only allocate a sequence, while completed segments touch files.
-        if event.get("event") in {"delta", "reasoning_delta"}:
-            metadata: dict[str, Any] = kwargs.get("metadata") or {}
-            generation = metadata.get("_webui_history_generation")
-            if generation:
-                event["history_generation"] = generation
-            return self._write_turn_stream_event(chat_id, event, **kwargs)
-        return await self._persist_owned_event(
-            chat_id, event, kwargs.get("metadata"),
-            lambda: self._write_turn_stream_event(chat_id, event, **kwargs),
-        )
-
-    def _write_turn_stream_event(
+    async def _persist_turn_stream_event(
         self,
         chat_id: str,
         event: dict[str, Any],
@@ -1218,12 +1185,14 @@ class WebSocketChannel(BaseChannel):
         include_source: bool = False,
     ) -> bool:
         """Persist the canonical end of a live stream, never its wire chunks."""
+        if generation := (metadata or {}).get(HISTORY_GENERATION_METADATA_KEY):
+            event["history_generation"] = generation
         if not self._temporary_chats.should_persist_transcript(chat_id):
             self._transcripts.prepare_event(
                 chat_id, event, metadata=metadata, phase=phase, include_source=include_source,
             )
             return True
-        persisted = self._transcripts.prepare_and_append_stream_event(
+        persisted = await self._transcripts.prepare_and_append_stream_event(
             chat_id,
             event,
             completed_text=completed_text,
@@ -1252,7 +1221,8 @@ class WebSocketChannel(BaseChannel):
                 current = manager.state.peek_identity(delivery.session_key)
             if current is None or current.generation != delivery.session_generation:
                 return
-        token = self._outbound_generation.set(delivery.session_generation if delivery is not None else None)
+        generation = msg.metadata.get(HISTORY_GENERATION_METADATA_KEY)
+        token = self._outbound_generation.set(generation if isinstance(generation, str) else None)
         try:
             await self._outbound.send(msg)
         finally:
@@ -1478,6 +1448,8 @@ class WebSocketChannel(BaseChannel):
         """Persist as requested, frame, and fan out one encoded WebUI payload."""
         conns = list(self._subs.get(chat_id, ()))
         body: dict[str, Any] = dict(payload)
+        if generation := (metadata or {}).get(HISTORY_GENERATION_METADATA_KEY) or self._outbound_generation.get():
+            body["history_generation"] = generation
         if persistence == "turn_activity":
             await self._persist_turn_transcript_event(
                 chat_id,
@@ -1586,6 +1558,8 @@ class WebSocketChannel(BaseChannel):
         }
         if provenance:
             body["provenance"] = provenance
+        if generation := self._outbound_generation.get():
+            body["history_generation"] = generation
         raw = json.dumps(body, ensure_ascii=False)
         for connection in conns:
             await self._safe_send_to(connection, raw, label=" user_message ")
@@ -1635,6 +1609,8 @@ class WebSocketChannel(BaseChannel):
         }
         if isinstance(model_preset, str) and model_preset.strip():
             body["model_preset"] = model_preset.strip()
+        if generation := self._outbound_generation.get():
+            body["history_generation"] = generation
         if isinstance(context_window_tokens, int) and context_window_tokens > 0:
             body["context_window_tokens"] = context_window_tokens
         if fallback:

@@ -479,6 +479,7 @@
       "byok": "BYOK",
       "overview": "概要",
       "appearance": "外観",
+      "notifications": "通知",
       "models": "モデル",
       "providers": "プロバイダー",
       "image": "画像",
@@ -516,6 +517,41 @@
       "hostSafety": "アプリの安全性",
       "voiceInput": "音声の文字起こし"
     },
+    "notifications": {
+      "scope": "このブラウザー",
+      "intro": "タスク終了時の通知方法を選んでください。",
+      "pageRequired": "ページの終了・一時停止・切断中は、新しい通知を受信できません。",
+      "revoked": "通知の許可が取り消されたため、通知をオフにしました。このブラウザーのサイト設定で通知を許可してから、ここでオンにしてください。",
+      "retry": "再確認",
+      "statusOff": "オフ",
+      "statusPermission": "許可が必要",
+      "statusOn": "オン",
+      "statusBlocked": "ブロック中",
+      "statusRevoked": "許可が取り消されました",
+      "statusUnavailable": "利用不可",
+      "statusWorker": "準備未完了",
+      "statusBusy": "確認中…",
+      "statusError": "送信失敗",
+      "test": "通知をテスト",
+      "testBody": "これはテスト通知です。",
+      "waiting": "ブラウザーの応答を待っています…",
+      "insecure": "通知を使うには、HTTPS または localhost で nanobot を開いてください。",
+      "unsupported": "このブラウザーは通知に非対応です。別のブラウザーをお試しください。iPhone や iPad ではホーム画面から nanobot を開いてください。",
+      "denied": "通知がブロックされています。このブラウザーのサイト設定で通知を許可してから、ここでオンにしてください。",
+      "dismissed": "通知が許可されていません。通知を有効にして「許可」を選んでください。",
+      "permissionFailed": "通知の許可を要求できませんでした。対応ブラウザーで再試行してください。",
+      "workerUnavailable": "通知サービスの準備ができていません。再確認するか、このページを再読み込みしてください。",
+      "displayFailed": "通知を送信できませんでした。サイトの通知権限を確認して再試行してください。",
+      "submitted": "ブラウザーに送信しました。表示されない場合は、システムの通知とおやすみモードを確認してください。",
+      "completed": "タスクが完了しました。クリックして結果を確認。",
+      "failed": "タスクが失敗しました。クリックして詳細を確認。",
+      "interrupted": "対応が必要です。クリックして続行。"
+    },
+    "readingTextSize": {
+      "small": "本文の文字サイズ：小",
+      "standard": "本文の文字サイズ：標準",
+      "large": "本文の文字サイズ：大"
+    },
     "rows": {
       "theme": "テーマ",
       "language": "言語",
@@ -529,6 +565,7 @@
       "pendingChanges": "適用待ちの変更",
       "selectedPreset": "選択中のプリセット",
       "presetModel": "プリセットモデル",
+      "readingTextSize": "本文の文字サイズ",
       "activityMode": "処理の詳細",
       "fileEditDisplay": "変更のプレビュー",
       "codeWrap": "コードの折り返し",
@@ -550,7 +587,7 @@
       "webuiDefaultAccess": "既定の権限",
       "currentModel": "現在の設定",
       "brandLogos": "ブランドロゴ",
-      "browserNotifications": "タスク通知",
+      "browserNotifications": "ブラウザー通知",
       "notificationSound": "完了時の音",
       "cliAppsCatalog": "カタログ",
       "cliAppsFilter": "フィルター",
@@ -594,8 +631,8 @@
       "selectedModelProvider": "選択したモデルによって設定されます。",
       "selectedModelValue": "選択したモデルによって設定されます。",
       "brandLogos": "設定画面にプロバイダーとアプリのロゴを表示します。\n\n設定で第三者プロバイダーと CLI のロゴを表示します。",
-      "browserNotifications": "ページがバックグラウンドのとき通知します。既定はオフです。",
-      "notificationSound": "返信完了時に音を鳴らします。既定はオフです。\n\nターンが完了したら、ページがバックグラウンドにあっても短いチャイムを再生します。既定ではオフです。",
+      "browserNotifications": "ページがバックグラウンドのときにタスクの状況を通知します。",
+      "notificationSound": "返信の終了時に、バックグラウンドでも通知音を鳴らします。",
       "cliAppsCatalog": "nanobot 用の CLI ツールをインストールします。デスクトップアプリは変わりません。\n\nnanobot がこのマシンで使用できるコマンドラインツールをインストールします。デスクトップアプリは変更しません。",
       "cliAppsFilter": "名前、分類、機能で検索します。",
       "logs": "デスクトップアプリのエンジンログを開きます。",
@@ -1961,8 +1998,8 @@
     "loadEarlier": "以前のメッセージを読み込む",
     "history": {
       "loading": "以前のメッセージを読み込み中…",
-      "error": "読み込みに失敗しました。",
-      "retry": "再試行"
+      "exhausted": "これより前のメッセージはありません",
+      "retryLabel": "読み込みに失敗しました。再試行"
     },
     "forkedFromHistory": "履歴から分岐",
     "promptNavigator": {
@@ -2345,6 +2382,8 @@
       "body": "ゲートウェイがこのメッセージを拒否しました。本文または添付ファイルを確認して、もう一度お試しください。"
     },
     "modelRequestFailed": {
+      "authenticationTitle": "モデルプロバイダーの認証に失敗しました",
+      "authenticationBody": "モデル設定で再度ログインするか、API キーを確認してください。",
       "billingTitle": "モデルプロバイダーの利用枠を使用できません",
       "billingBody": "プロバイダーアカウントにクレジットを追加するか、請求状況を確認してから、もう一度お試しください。",
       "connectionTitle": "モデルプロバイダーに接続できません",
@@ -2352,8 +2391,8 @@
       "rateLimitTitle": "モデルプロバイダーのリクエスト上限に達しました",
       "serverTitle": "モデルプロバイダーでサービスエラーが発生しました",
       "unknownTitle": "モデルプロバイダーへのリクエストに失敗しました",
-      "bodyWithAttempt": "{{attempts}} 回目の試行でもリクエストに失敗したため、再試行を停止しました。プロバイダーの設定またはサービス状況を確認して、もう一度お試しください。",
-      "body": "プロバイダーの設定またはサービス状況を確認して、もう一度お試しください。"
+      "bodyWithAttempt": "{{attempts}} 回試行して停止しました。後でもう一度試すか、別のモデルを選んでください。",
+      "body": "後でもう一度試すか、別のモデルを選んでください。"
     }
   },
   "workspace": {

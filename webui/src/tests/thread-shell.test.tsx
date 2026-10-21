@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { StrictMode, type ReactNode } from "react";
+import { Profiler, StrictMode, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { preloadMarkdownText } from "@/components/MarkdownText";
@@ -304,11 +304,7 @@ function httpJson(body: unknown) {
     && "messages" in body
       ? canonicalThreadPayload(body as never)
       : body;
-  return {
-    ok: true,
-    status: 200,
-    json: async () => normalized,
-  };
+  return Response.json(normalized);
 }
 
 function traceDetailThread(
@@ -361,9 +357,7 @@ function restoreDocumentVisibility(
   if (descriptor) {
     Object.defineProperty(document, "visibilityState", descriptor);
   } else {
-    delete (document as Document & {
-      visibilityState?: DocumentVisibilityState;
-    }).visibilityState;
+    Reflect.deleteProperty(document, "visibilityState");
   }
 }
 
@@ -1814,7 +1808,7 @@ describe("ThreadShell", () => {
       completed_turn_ids: [],
     });
     vi.mocked(fetch).mockImplementation(async (input) => (
-      String(input).includes("/webui-thread") ? initialHistory
+      String(input).includes("/webui-thread") ? initialHistory.clone()
         : { ok: false, status: 404, json: async () => ({}) }
     ) as Response);
     render(wrap(client, <ThreadShell session={session(chatId)} title="Queued chat" onToggleSidebar={() => {}} />));
@@ -1854,7 +1848,7 @@ describe("ThreadShell", () => {
       act(() => client._emitChat(chatId, { event: "turn_end", chat_id: chatId, turn_id: nextTurnId }));
       expect(client.sendMessage).toHaveBeenCalledTimes(1);
     } finally {
-      await act(async () => { finishRefresh(initialHistory as Response); });
+      await act(async () => { finishRefresh(initialHistory.clone()); });
     }
   });
 
@@ -4084,6 +4078,89 @@ describe("ThreadShell", () => {
     },
   );
 
+  it.each([
+    { name: "visible rows after a hidden command prefix", rows: [
+      { role: "user" as const, content: "/model hidden", turnId: "webui-system:model" },
+      { role: "assistant" as const, content: "hidden model response", turnId: "webui-system:model" },
+      { role: "user" as const, content: "older question", turnId: "older-turn" },
+      { role: "assistant" as const, content: "older answer", turnId: "older-turn" },
+    ], expectVisible: true },
+    { name: "a page containing only hidden command rows", rows: [
+      { role: "user" as const, content: "/model hidden", turnId: "webui-system:model" },
+      { role: "assistant" as const, content: "hidden model response", turnId: "webui-system:model" },
+    ], expectVisible: false },
+    { name: "an empty successful page", rows: [], expectVisible: false },
+    { name: "a failed page", rows: [], expectVisible: false, error: true },
+  ])("releases older-page loading after ThreadShell handles $name", async ({ rows, expectVisible, error = false }) => {
+    const client = makeClient();
+    const chatId = `older-projection-${expectVisible ? "visible" : "hidden"}`;
+    let resolveOlder!: (response: Response) => void;
+    let olderReturned = false;
+    const commits: Array<{ loading: boolean; olderVisible: boolean }> = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (!url.includes(`websocket%3A${chatId}/webui-thread`)) {
+        return { ok: false, status: 404, json: async () => ({}) };
+      }
+      if (url.includes("before=")) {
+        return new Promise<Response>((resolve) => { resolveOlder = resolve; });
+      }
+      return httpJson({
+        ...transcriptFromSimpleMessages([
+          { role: "user", content: "current question", turnId: "current-turn" },
+        ]),
+        has_pending_tool_calls: expectVisible,
+        active_turn_id: expectVisible ? "current-turn" : null,
+        completed_turn_ids: [],
+        page: { before_cursor: "older-page", has_more_before: true, user_message_offset: 1 },
+      });
+    }));
+    const capture = () => {
+      if (!olderReturned) return;
+      commits.push({
+        loading: document.querySelector('.thread-history-status[data-state="loading"]') !== null,
+        olderVisible: document.body.textContent?.includes("older answer") ?? false,
+      });
+    };
+    const { container } = render(wrap(client, <Profiler id="older-history" onRender={capture}>
+      <ThreadShell session={session(chatId)} title="Older projection" onToggleSidebar={() => {}} />
+    </Profiler>));
+    await screen.findByText("current question");
+    const scroller = container.querySelector(".thread-message-viewport") as HTMLElement;
+    Object.defineProperties(scroller, {
+      scrollHeight: { configurable: true, value: 2400 },
+      clientHeight: { configurable: true, value: 600 },
+      scrollTop: { configurable: true, writable: true, value: 0 },
+    });
+    fireEvent.keyDown(scroller, { key: "Home" });
+    await waitFor(() => expect(resolveOlder).toBeTypeOf("function"));
+    await screen.findByText("Loading earlier messages…");
+    if (expectVisible) {
+      act(() => client._emitChat(chatId, {
+        event: "delta", chat_id: chatId, turn_id: "current-turn", text: "live during pagination",
+      }));
+      await screen.findByText("live during pagination");
+    }
+    const olderPayload = rows.length > 0
+      ? transcriptFromSimpleMessages(rows)
+      : { schemaVersion: 3, projection: "events", events: [], page: { before_cursor: null, has_more_before: false } };
+    olderReturned = true;
+    await act(async () => {
+      resolveOlder(error
+        ? new Response("History unavailable", { status: 503 })
+        : httpJson({ ...olderPayload, page: { before_cursor: null, has_more_before: false } }));
+    });
+    if (expectVisible) await screen.findByText("older answer");
+    await waitFor(() => expect(container.querySelector('.thread-history-status[data-state="loading"]')).toBeNull());
+    expect(commits.some((commit) => commit.loading && !commit.olderVisible)).toBe(expectVisible);
+    if (error) {
+      expect(container.querySelector('.thread-history-status[data-state="error"]')).toBeInTheDocument();
+      expect(container.querySelector(".thread-history-slot")).toBeInTheDocument();
+    } else {
+      expect(container.querySelector(".thread-history-slot")).not.toBeInTheDocument();
+    }
+  });
+
   it("prepends earlier history while preserving the active answer cursor", async () => {
     const client = makeClient();
     const chatId = "running-paged-history";
@@ -4673,7 +4750,6 @@ describe("ThreadShell", () => {
             (event) => event.event === "message" && event.text === "answer",
           );
           if (answer?.event === "message") answer.media_urls = [{
-            kind: "image",
             url: "/api/media/stable/image",
             name: "answer.png",
           }];
@@ -4727,7 +4803,6 @@ describe("ThreadShell", () => {
             (event) => event.event === "message" && event.text === "answer",
           );
           if (answer?.event === "message") answer.media_urls = [{
-            kind: "image",
             url: "/api/media/stable/token-image",
             name: "token-answer.png",
           }];
@@ -5114,7 +5189,7 @@ describe("ThreadShell", () => {
     });
   });
 
-  it("keeps a terminal model failure visible until the next user action", async () => {
+  it.each([false, true])("keeps one terminal model failure visible until the next user action (recovery: %s)", async (recoverable) => {
     const client = makeClient();
     await act(async () => {
       await i18n.changeLanguage("zh-CN");
@@ -5150,14 +5225,40 @@ describe("ThreadShell", () => {
     const banner = await screen.findByRole("alert");
     expect(banner).toHaveTextContent("无法连接模型提供商");
     expect(banner).toHaveTextContent(
-      "模型提供商请求在第 4 次尝试后仍然失败，已停止重试。请检查提供商配置或服务状态后重试。",
+      "已尝试 4 次，仍未成功。可稍后继续或切换模型。",
     );
     expect(banner).not.toHaveTextContent("Unlocalized server failure");
+    if (recoverable) {
+      act(() => {
+        client._emitChat("chat-model-failure", {
+          event: "recovery_state",
+          chat_id: "chat-model-failure",
+          recovery_id: "model-recovery",
+          status: "awaiting_user",
+          reason: "model_request_failed",
+          failure_error_kind: "connection",
+        });
+      });
+      expect(screen.getAllByRole("alert")).toHaveLength(1);
+      expect(screen.getByRole("alert")).toHaveTextContent("无法连接模型提供商");
+      expect(screen.getByRole("button", { name: "继续" })).toBeEnabled();
+    }
 
     fireEvent.change(screen.getByLabelText("消息输入框"), {
       target: { value: "try again" },
     });
     fireEvent.click(screen.getByRole("button", { name: "发送消息" }));
+    if (recoverable) {
+      act(() => {
+        client._emitChat("chat-model-failure", {
+          event: "recovery_state",
+          chat_id: "chat-model-failure",
+          recovery_id: "model-recovery",
+          status: "recovered",
+          reason: "superseded",
+        });
+      });
+    }
 
     await waitFor(() => {
       expect(screen.queryByRole("alert")).not.toBeInTheDocument();
@@ -5316,7 +5417,13 @@ describe("ThreadShell", () => {
     });
 
     expect(screen.queryByText("from chat a")).not.toBeInTheDocument();
-    expect(screen.getByText("Loading conversation…")).toBeInTheDocument();
+    const loading = screen.getByRole("status", { name: "Loading conversation…" });
+    expect(loading).toHaveAttribute("aria-busy", "true");
+    expect(loading.querySelector("[aria-hidden]")).not.toBeEmptyDOMElement();
+    expect(screen.getByRole("textbox", { name: "Message input" })).toBeEnabled();
+    const header = screen.getByTestId("thread-header");
+    const composer = screen.getByTestId("thread-composer-motion");
+    expect(composer.closest("[data-layout]")).toHaveAttribute("data-layout", "thread");
 
     await act(async () => {
       resolveChatB?.(
@@ -5326,6 +5433,44 @@ describe("ThreadShell", () => {
 
     await waitFor(() => expect(screen.getByText("from chat b")).toBeInTheDocument());
     expect(screen.queryByText("from chat a")).not.toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "Loading conversation…" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("thread-header")).toBe(header);
+    expect(screen.getByTestId("thread-composer-motion")).toBe(composer);
+  });
+
+  it.each([false, true])("replaces the initial history skeleton with welcome when no visible history remains (systemOnly=%s)", async (systemOnly) => {
+    let resolveHistory!: (response: Response) => void;
+    vi.mocked(fetch).mockImplementation((input) => String(input).includes("/webui-thread")
+      ? new Promise<Response>((resolve) => { resolveHistory = resolve; })
+      : Promise.resolve(new Response(null, { status: 404 })));
+    render(wrap(makeClient(), <ThreadShell session={session("empty-topic")} title="Empty topic"
+      onToggleSidebar={() => {}} />));
+
+    expect(screen.getByRole("status", { name: "Loading conversation…" })).toHaveAttribute("aria-busy", "true");
+    await act(async () => {
+      resolveHistory(httpJson(transcriptFromSimpleMessages(systemOnly
+        ? [{ role: "assistant", content: "Model selected", turnId: "webui-system:model-preset" }]
+        : [])));
+    });
+
+    expect(await screen.findByText(HERO_GREETING_PATTERN)).toBeVisible();
+    expect(screen.queryByRole("status", { name: "Loading conversation…" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("thread-welcome-layout")).toHaveAttribute("data-layout", "hero");
+  });
+
+  it("keeps cached messages visible while the first history revalidation is pending", async () => {
+    webuiThreadCache.set("websocket:cached-topic", transcriptFromSimpleMessages([
+      { role: "assistant", content: "Cached answer" },
+    ]));
+    vi.mocked(fetch).mockImplementation((input) => String(input).includes("/webui-thread")
+      ? new Promise<Response>(() => {})
+      : Promise.resolve(new Response(null, { status: 404 })));
+    render(wrap(makeClient(), <ThreadShell session={session("cached-topic")} title="Cached topic"
+      onToggleSidebar={() => {}} />));
+
+    expect(await screen.findByText("Cached answer")).toBeVisible();
+    expect(screen.queryByRole("status", { name: "Loading conversation…" })).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Message input" })).toBeEnabled();
   });
 
   it("loads mention catalogs only on demand and ignores window focus", async () => {

@@ -665,6 +665,7 @@
       "byok": "BYOK",
       "overview": "Overview",
       "appearance": "Appearance",
+      "notifications": "Notifications",
       "models": "Models",
       "providers": "Providers",
       "image": "Image",
@@ -771,6 +772,41 @@
       "autoProviderCustomOnly": "Enter a model ID manually when using automatic provider selection.",
       "availableCount": "Models available: {{count}}"
     },
+    "notifications": {
+      "scope": "This browser",
+      "intro": "Choose how to be notified when a task finishes.",
+      "pageRequired": "No new alerts when this page is closed, suspended, or disconnected.",
+      "revoked": "Notification permission was revoked. Notifications are now off. Allow notifications in this browser’s site settings, then turn them on here.",
+      "retry": "Check again",
+      "statusOff": "Off",
+      "statusPermission": "Permission needed",
+      "statusOn": "On",
+      "statusBlocked": "Blocked",
+      "statusRevoked": "Permission revoked",
+      "statusUnavailable": "Unavailable",
+      "statusWorker": "Not ready",
+      "statusBusy": "Checking…",
+      "statusError": "Could not send",
+      "test": "Test notification",
+      "testBody": "This is a test notification.",
+      "waiting": "Waiting for the browser…",
+      "insecure": "Open nanobot over HTTPS or on localhost to use notifications.",
+      "unsupported": "This browser doesn’t support notifications. Try another browser; on iPhone or iPad, open nanobot from the Home Screen.",
+      "denied": "Notifications are blocked. Allow notifications in this browser’s site settings, then turn them on here.",
+      "dismissed": "Permission was not granted. Turn on notifications and choose Allow.",
+      "permissionFailed": "Could not request permission. Try again in a supported browser.",
+      "workerUnavailable": "The notification service is not ready. Check again or reload this page.",
+      "displayFailed": "The browser could not send the notification. Check site permissions, then try again.",
+      "submitted": "Sent to the browser. If nothing appears, check system notifications and Do Not Disturb.",
+      "completed": "Task completed. Click to view the result.",
+      "failed": "Task failed. Click for details.",
+      "interrupted": "Task needs attention. Click to continue."
+    },
+    "readingTextSize": {
+      "small": "Small reading text",
+      "standard": "Standard reading text",
+      "large": "Large reading text"
+    },
     "rows": {
       "theme": "Theme",
       "language": "Language",
@@ -785,11 +821,12 @@
       "currentModel": "Current configuration",
       "selectedPreset": "Selected preset",
       "presetModel": "Preset model",
+      "readingTextSize": "Reading text size",
       "activityMode": "Activity details",
       "fileEditDisplay": "Edit preview",
       "codeWrap": "Code wrapping",
       "brandLogos": "Brand logos",
-      "browserNotifications": "Task notifications",
+      "browserNotifications": "Browser notifications",
       "notificationSound": "Completion sound",
       "maxResults": "Result limit",
       "timeout": "Search timeout",
@@ -835,8 +872,8 @@
       "fileEditDisplay": "Show edit line counts or expanded changes by default.",
       "codeWrap": "Wrap long code lines for easier reading.",
       "brandLogos": "Show provider and app logos in Settings.\n\nShow third-party provider and CLI logos in Settings.",
-      "browserNotifications": "Notify when this page is in the background. Off by default.",
-      "notificationSound": "Play a sound when replies finish. Off by default.\n\nPlay a short chime when a turn finishes, even when this page is in the background. Off by default.",
+      "browserNotifications": "Get task status notifications while this page is in the background.",
+      "notificationSound": "Play a chime when a reply ends, even in the background.",
       "maxResults": "Maximum results per search.",
       "timeout": "Maximum wait per search, in seconds.",
       "jinaReader": "Prefer Jina Reader for reading pages.\n\nUse Jina Reader to read web pages when available.",
@@ -2161,8 +2198,8 @@
     "loadEarlier": "Load earlier messages",
     "history": {
       "loading": "Loading earlier messages…",
-      "error": "Loading failed.",
-      "retry": "Retry"
+      "exhausted": "No earlier messages",
+      "retryLabel": "Loading failed. Retry"
     },
     "forkedFromHistory": "Forked from history",
     "promptNavigator": {
@@ -2545,6 +2582,8 @@
       "body": "The gateway rejected this message. Review its text or attachments, then try again."
     },
     "modelRequestFailed": {
+      "authenticationTitle": "Model provider authorization failed",
+      "authenticationBody": "Sign in again or check the provider’s API key in model settings.",
       "billingTitle": "Model provider quota is unavailable",
       "billingBody": "Add credit or check billing for the provider account, then try again.",
       "connectionTitle": "Could not connect to the model provider",
@@ -2552,8 +2591,8 @@
       "rateLimitTitle": "Model provider rate limit reached",
       "serverTitle": "Model provider service error",
       "unknownTitle": "Model provider request failed",
-      "bodyWithAttempt": "The request still failed on attempt {{attempts}}, so retries stopped. Check the provider configuration or service status, then try again.",
-      "body": "Check the provider configuration or service status, then try again."
+      "bodyWithAttempt": "Stopped after {{attempts}} attempts. Try again later or choose another model.",
+      "body": "Try again later or choose another model."
     }
   },
   "workspace": {

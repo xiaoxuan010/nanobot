@@ -143,6 +143,7 @@ import {
 import { formatQuotedUserMessage } from "@/lib/user-message-quote";
 import { cn } from "@/lib/utils";
 import type { ComposerDraftStore } from "@/lib/composer-draft";
+import { useLocalPreferences } from "@/hooks/useLocalPreferences";
 
 const VOICE_SHORTCUT_CODE = "KeyD";
 const VOICE_SHORTCUT_ARIA = "Control+Shift+D";
@@ -973,7 +974,7 @@ function GoalStateStrip({
             id="nanobot-goal-panel-scroll"
             className="min-h-0 flex-1 overflow-y-auto scrollbar-thin px-3 pb-3 pt-2"
           >
-            <MarkdownText className="max-w-none text-[13.5px] leading-relaxed text-foreground/90">
+            <MarkdownText className="max-w-none text-foreground/90">
               {markdownBody}
             </MarkdownText>
           </div>
@@ -1021,6 +1022,20 @@ function GoalStateStrip({
       </div>
     </div>
   );
+}
+
+function autosizeTextarea(input: HTMLTextAreaElement) {
+  const container = input.parentElement!;
+  const previousMinHeight = container.style.minHeight;
+  // Measuring the one-row textarea must not expand the sibling transcript and
+  // clamp its native scroll offset, even temporarily before paint.
+  container.style.minHeight = `${container.getBoundingClientRect().height}px`;
+  try {
+    input.style.height = "auto";
+    input.style.height = `${Math.min(input.scrollHeight, 260)}px`;
+  } finally {
+    container.style.minHeight = previousMinHeight;
+  }
 }
 
 export function ThreadComposer({
@@ -1113,6 +1128,7 @@ export function ThreadComposer({
   // Coarser than hasTouchPrimaryPointer on purpose: tablets with a physical
   // keyboard still get the newline-on-Enter behavior.
   const hasCoarsePointer = useMediaQuery("(pointer: coarse)");
+  const { readingTextSize } = useLocalPreferences();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mentionOverlayRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -1128,10 +1144,7 @@ export function ThreadComposer({
       previousWidth = width;
       setCompactControls(width <= 512);
       const input = textareaRef.current;
-      if (input) {
-        input.style.height = "auto";
-        input.style.height = `${Math.min(input.scrollHeight, 260)}px`;
-      }
+      if (input) autosizeTextarea(input);
     };
     update();
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
@@ -1733,23 +1746,22 @@ export function ThreadComposer({
     };
   }, [filteredMentionCandidates.length, filteredSlashCommands.length, showAnyPalette]);
 
-  const resizeTextarea = useCallback((restoreFocus = true) => {
-    requestAnimationFrame(() => {
-      const el = textareaRef.current;
-      if (!el) return;
-      el.style.height = "auto";
-      el.style.height = `${Math.min(el.scrollHeight, 260)}px`;
-      if (restoreFocus) el.focus();
-    });
+  const focusTextarea = useCallback(() => {
+    requestAnimationFrame(() => textareaRef.current?.focus());
   }, []);
 
   useLayoutEffect(() => {
     const el = textareaRef.current;
     if (!el || mentionInput.isComposing) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 260)}px`;
+    autosizeTextarea(el);
     if (mentionOverlayRef.current) mentionOverlayRef.current.scrollTop = el.scrollTop;
   }, [compactControls, mentionInput.isComposing, mentionInput.value]);
+
+  useEffect(() => {
+    // The parent projects typography tokens in its layout effect; measure after it.
+    const input = textareaRef.current;
+    if (input) autosizeTextarea(input);
+  }, [readingTextSize]);
 
   // Runs before paint so switching sessions never flashes stale draft text.
   useLayoutEffect(() => {
@@ -1762,12 +1774,6 @@ export function ThreadComposer({
     setCliAppMenuDismissed(false);
     setCursorPosition(0);
     clear();
-    requestAnimationFrame(() => {
-      const el = textareaRef.current;
-      if (!el) return;
-      el.style.height = "auto";
-      el.style.height = `${Math.min(el.scrollHeight, 260)}px`;
-    });
   }, [clear, pendingQueueKey]);
 
   const appendTranscription = useCallback((text: string) => {
@@ -1782,8 +1788,8 @@ export function ThreadComposer({
     setSlashMenuDismissed(false);
     setCliAppMenuDismissed(false);
     setInlineError(null);
-    resizeTextarea();
-  }, [resizeTextarea]);
+    focusTextarea();
+  }, [focusTextarea]);
 
   const clearVoiceErrorTimers = useCallback(() => {
     if (voiceErrorFadeTimerRef.current !== null) clearTimeout(voiceErrorFadeTimerRef.current);
@@ -1866,7 +1872,7 @@ export function ThreadComposer({
         setSlashMenuDismissed(true);
         setCliAppMenuDismissed(false);
         setInlineError(null);
-        resizeTextarea();
+        focusTextarea();
         return;
       }
 
@@ -1889,9 +1895,9 @@ export function ThreadComposer({
       setSlashMenuDismissed(true);
       setCliAppMenuDismissed(false);
       setInlineError(null);
-      resizeTextarea();
+      focusTextarea();
     },
-    [handleStop, isStreaming, onStop, recentSlashCommands, replaceMentionInput, resizeTextarea, skillQuery, value],
+    [handleStop, isStreaming, onStop, recentSlashCommands, replaceMentionInput, focusTextarea, skillQuery, value],
   );
 
   const insertMention = useCallback(
@@ -1901,9 +1907,9 @@ export function ThreadComposer({
       setCliAppMenuDismissed(true);
       setSlashMenuDismissed(false);
       setInlineError(null);
-      resizeTextarea();
+      focusTextarea();
     },
-    [replaceMentionInput, resizeTextarea, value],
+    [replaceMentionInput, focusTextarea, value],
   );
 
   const chooseMentionCandidate = useCallback(
@@ -1976,8 +1982,8 @@ export function ThreadComposer({
     setSlashMenuDismissed(false);
     setCliAppMenuDismissed(false);
     setCursorPosition(0);
-    resizeTextarea(restoreFocus);
-  }, [resizeTextarea]);
+    if (restoreFocus) focusTextarea();
+  }, [focusTextarea]);
 
   const queuedPromptError = useCallback((prompt: QueuedPrompt): string | null => {
     if (utf8Bytes(formatQuotedUserMessage(prompt.text, prompt.quotedContext)) > maxTextBytes) {
@@ -2047,8 +2053,8 @@ export function ThreadComposer({
     } else {
       clear();
     }
-    resizeTextarea();
-  }, [clear, collectGuidancePrompt, hasComposerContent, normalizedQuotedContext, onQuotedContextChange, replaceMentionInput, resizeTextarea, restoreReadyImages, setQueuedPrompt]);
+    focusTextarea();
+  }, [clear, collectGuidancePrompt, hasComposerContent, normalizedQuotedContext, onQuotedContextChange, replaceMentionInput, focusTextarea, restoreReadyImages, setQueuedPrompt]);
 
   const sendQueuedPrompt = useCallback(
     (prompt: QueuedPrompt, extraOptions?: SendOptions) => {
@@ -2331,13 +2337,6 @@ export function ThreadComposer({
     }
   };
 
-  const onInput: React.FormEventHandler<HTMLTextAreaElement> = (e) => {
-    if ((e.nativeEvent as InputEvent).isComposing) return;
-    const el = e.currentTarget;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 260)}px`;
-  };
-
   const onFilePick: React.ChangeEventHandler<HTMLInputElement> = (e) => {
     const files = Array.from(e.target.files ?? []);
     e.target.value = "";
@@ -2470,15 +2469,15 @@ export function ThreadComposer({
   ) : null;
   const inputTextClasses = cn(
     // Keep the overlay's CJK/Latin spacing aligned with the native textarea caret.
-    "w-full resize-none bg-transparent [text-autospace:no-autospace]",
+    "w-full resize-none bg-transparent text-composer [text-autospace:no-autospace]",
     compactControls
-      ? "min-h-[52px] px-4 pb-2 pt-3 text-[16px] leading-6"
+      ? "min-h-[52px] px-4 pb-2 pt-3"
       : isHero
         ? cn(
-            "min-h-[78px] px-4 text-[16px] leading-6 sm:px-5",
+            "min-h-[78px] px-4 sm:px-5",
             relaxedHeroInput ? "pb-2 pt-[27px]" : "pb-1.5 pt-4",
           )
-        : "min-h-[50px] px-3.5 pb-1.5 pt-3 text-[16px] leading-5 sm:px-4",
+        : "min-h-[50px] px-3.5 pb-1.5 pt-3 sm:px-4",
   );
   const paletteBeside = showAnyPalette && slashPaletteLayout.placement === "beside";
 
@@ -2559,8 +2558,8 @@ export function ThreadComposer({
           "thread-composer-surface group/composer relative mx-auto flex w-full flex-col overflow-visible transition-all duration-200",
           paletteBeside && "col-start-1 row-start-1",
           isHero
-            ? "max-w-[58rem] rounded-prominent bg-muted/80 focus-within:bg-muted dark:bg-card dark:focus-within:bg-white/[0.06]"
-            : "max-w-[49.5rem] rounded-panel bg-muted/80 focus-within:bg-muted dark:bg-card dark:focus-within:bg-white/[0.06]",
+            ? "max-w-[var(--composer-content-width,58rem)] rounded-prominent bg-muted/80 focus-within:bg-muted dark:bg-card dark:focus-within:bg-white/[0.06]"
+            : "max-w-[var(--composer-content-width,49.5rem)] rounded-panel bg-muted/80 focus-within:bg-muted dark:bg-card dark:focus-within:bg-white/[0.06]",
           compactWhenIdle && "thread-composer-collapsible transition-colors motion-reduce:transition-none",
           interactionDisabled && "opacity-60",
           sessionDragPreview && "ring-1 ring-primary/25",
@@ -2617,7 +2616,7 @@ export function ThreadComposer({
             aria-label={t("thread.composer.quotedContext")}
           >
             <Quote className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-            <p className="line-clamp-2 min-w-0 flex-1 text-[13px]/[1.45]">
+            <p className="line-clamp-2 min-w-0 flex-1 text-reading-small">
               {normalizedQuotedContext}
             </p>
             <button
@@ -2659,7 +2658,6 @@ export function ThreadComposer({
             onBlur={() => {
               secondEnterPromptIdRef.current = null;
             }}
-            onInput={onInput}
             onKeyDown={onKeyDown}
             onKeyUp={() => setCursorPosition(rawSelection().start)}
             onSelect={() => setCursorPosition(rawSelection().start)}

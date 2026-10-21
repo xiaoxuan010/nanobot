@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next";
 import { useThreadVisibility } from "@/hooks/useThreadVisibility";
 
 import { useClient } from "@/providers/ClientProvider";
-import { resolveModelRequestFailureCopy } from "@/lib/model-request-failure";
 import { hasPendingAgentActivity } from "@/lib/activity-timeline";
 import type { StreamError } from "@/lib/nanobot-client";
 import {
@@ -23,7 +22,6 @@ import type {
   UIMessageTurnFields,
 } from "@/lib/thread-event-projection";
 import { formatQuotedUserMessage } from "@/lib/user-message-quote";
-import { readLocalPreferences } from "@/lib/local-preferences";
 import { playTurnCompleteSound } from "@/lib/notification-sound";
 import type {
   InboundEvent,
@@ -216,16 +214,6 @@ export function useNanobotStream(
   const sideChannelTurnIdsRef = useRef<Set<string>>(new Set());
 
   const dismissStreamError = useCallback(() => setStreamError(null), []);
-
-  const notifyInBackground = useCallback((body: string) => {
-    if (
-      typeof Notification === "undefined"
-      || Notification.permission !== "granted"
-      || document.visibilityState === "visible"
-      || !readLocalPreferences().browserNotifications
-    ) return;
-    new Notification("nanobot", { body });
-  }, []);
 
   const clearPendingStreamWork = useCallback(() => {
     if (streamFrameRef.current !== null) {
@@ -831,13 +819,6 @@ export function useNanobotStream(
           : null;
         if (modelFailure) setStreamError(modelFailure);
         applyProjectionEvent(ev);
-        notifyInBackground(
-          modelFailure
-            ? resolveModelRequestFailureCopy(modelFailure, t).body
-            : ev.outcome === "failed"
-              ? ev.failure_message || "This turn failed and has ended."
-            : t("recovery.completed", { defaultValue: "Task completed" }),
-        );
         playTurnCompleteSound();
         onTurnEnd?.();
         return;
@@ -852,8 +833,14 @@ export function useNanobotStream(
           ...(typeof ev.can_continue === "boolean"
             ? { can_continue: ev.can_continue }
             : {}),
+          ...(typeof ev.failure_error_kind === "string"
+            ? { failure_error_kind: ev.failure_error_kind }
+            : {}),
         };
         setRecoveryState(next);
+        if (ev.reason === "model_request_failed" || ev.status === "resuming") {
+          setStreamError(null);
+        }
         if (ev.status === "resuming") {
           setRunStartedAt((current) => current ?? Date.now() / 1000);
           setIsStreaming(true);
@@ -874,19 +861,18 @@ export function useNanobotStream(
           clearPendingStreamWork();
           closeActiveAssistantStream();
           clearActivitySegment();
-          if (ev.status !== "recovered") {
-            notifyInBackground(
-              ev.status === "failed"
-                ? t("recovery.failed", { defaultValue: "Task recovery failed" })
-                : t("recovery.interrupted", { defaultValue: "Task interrupted" }),
-            );
-          }
         }
         return;
       }
 
       if (ev.event === "attached") {
         setRecoveryState(ev.recovery_state ?? null);
+        if (
+          ev.recovery_state?.reason === "model_request_failed"
+          || ev.recovery_state?.status === "resuming"
+        ) {
+          setStreamError(null);
+        }
         if (ev.recovery_state?.status === "resuming") {
           setRunStartedAt((current) => current ?? Date.now() / 1000);
           setIsStreaming(true);
@@ -942,7 +928,6 @@ export function useNanobotStream(
     clearPendingStreamWork,
     flushPendingStreamEvents,
     isSideChannelEvent,
-    notifyInBackground,
     onTurnEnd,
     onStreamDetach,
     schedulePendingStreamFlush,

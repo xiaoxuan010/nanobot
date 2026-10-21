@@ -161,11 +161,12 @@ def test_write_text_atomic_fsyncs_file_and_parent_directory(
     def fake_fsync(fd: int) -> None:
         fsync_calls.append(fd)
 
-    monkeypatch.setattr(helpers.os, "fsync", fake_fsync)
-    monkeypatch.setattr(helpers.os, "open", lambda path, flags: 12345)
-    monkeypatch.setattr(helpers.os, "close", lambda fd: closed_fds.append(fd))
+    with monkeypatch.context() as patch:
+        patch.setattr(helpers.os, "fsync", fake_fsync)
+        patch.setattr(helpers.os, "open", lambda path, flags: 12345)
+        patch.setattr(helpers.os, "close", lambda fd: closed_fds.append(fd))
 
-    _write_text_atomic(target, '{"approved": {}}')
+        _write_text_atomic(target, '{"approved": {}}')
 
     assert target.read_text(encoding="utf-8") == '{"approved": {}}'
     assert len(fsync_calls) == 2
@@ -183,10 +184,11 @@ def test_write_text_atomic_keeps_file_when_directory_fsync_is_unsupported(
     def fake_open(path, flags):
         raise OSError("directory fsync unsupported")
 
-    monkeypatch.setattr(helpers.os, "fsync", lambda fd: fsync_calls.append(fd))
-    monkeypatch.setattr(helpers.os, "open", fake_open)
+    with monkeypatch.context() as patch:
+        patch.setattr(helpers.os, "fsync", lambda fd: fsync_calls.append(fd))
+        patch.setattr(helpers.os, "open", fake_open)
 
-    _write_text_atomic(target, '{"pending": {}}')
+        _write_text_atomic(target, '{"pending": {}}')
 
     assert target.read_text(encoding="utf-8") == '{"pending": {}}'
     assert len(fsync_calls) == 1

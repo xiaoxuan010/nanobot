@@ -29,6 +29,7 @@ import {
   toModelBadgeInfo,
 } from "@/components/thread/model-preset";
 import { ThreadHeader } from "@/components/thread/ThreadHeader";
+import { ThreadLoadingSkeleton } from "@/components/thread/ThreadLoadingSkeleton";
 import { StreamErrorNotice } from "@/components/thread/StreamErrorNotice";
 import { ThreadViewport, type ThreadViewportHandle } from "@/components/thread/ThreadViewport";
 import { useNanobotStream, type SendAttachment, type SendOptions } from "@/hooks/useNanobotStream";
@@ -902,6 +903,7 @@ export function ThreadShell({
   activeHistoryKeyRef.current = historyKey;
   const currentUiMessagesRef = useRef<UIMessage[] | null>(null);
   const uiRevisionRef = useRef(0);
+  const olderPageStartRef = useRef<{ historyKey: string; client: typeof client; visibleFirstId: string | null } | null>(null);
   const showTemporaryChatControl =
     !hideHeader && !session && !loading && !!onTemporaryChatEnabledChange;
 
@@ -941,8 +943,40 @@ export function ThreadShell({
     chatId, initial, hasPendingToolCalls, handleTurnEnd, handleStreamDetach, completedTurnIds,
   );
   const displayMessages = useMemo(() => projectWebuiThreadMessages(messages), [messages]);
+  const normalizedHistory = useMemo(() => projectWebuiThreadMessages(historical), [historical]);
+  // The response can arrive one commit before its messages reach the viewport.
+  const initialHistoryLoading = loading || (normalizedHistory.length > 0 && displayMessages.length === 0);
   const promptNavigation = usePromptHistory(historyKey, historyVersion, displayMessages, historyGeneration);
   const updateNavigationMessages = promptNavigation.updateMessages;
+
+  const olderPageProjectionPending = Boolean(
+    olderPageStartRef.current?.historyKey === historyKey
+    && olderPageStartRef.current.client === client
+    && !loadingOlder
+    && !olderError
+    && normalizedHistory[0]?.id !== olderPageStartRef.current.visibleFirstId
+    && displayMessages[0]?.id !== normalizedHistory[0]?.id,
+  );
+  useLayoutEffect(() => {
+    const pending = olderPageStartRef.current;
+    if (pending && (pending.historyKey !== historyKey || pending.client !== client)) {
+      olderPageStartRef.current = null;
+    }
+    if (!historyKey) {
+      olderPageStartRef.current = null;
+    } else if (loadingOlder) {
+      // The request may finish before this shell commits the rendered projection.
+      if (!olderPageStartRef.current) {
+        olderPageStartRef.current = {
+          historyKey,
+          client,
+          visibleFirstId: normalizedHistory[0]?.id ?? null,
+        };
+      }
+    } else if (olderError || !olderPageProjectionPending) {
+      olderPageStartRef.current = null;
+    }
+  }, [client, displayMessages, historyKey, loadingOlder, olderError, olderPageProjectionPending, normalizedHistory]);
 
   const loadTraceDetails = useCallback(async (refs: string[]) => {
     const requestKey = historyKey;
@@ -1146,7 +1180,7 @@ export function ThreadShell({
     chatId,
   ]);
 
-  const showHeroComposer = displayMessages.length === 0 && !loading;
+  const showHeroComposer = displayMessages.length === 0 && !initialHistoryLoading;
   const composerVariant = showHeroComposer ? emptyComposerVariant : "thread";
   const wasShowingHeroComposerRef = useRef(showHeroComposer);
   const sessionModelPreset = session?.modelPreset?.trim() || null;
@@ -1276,9 +1310,9 @@ export function ThreadShell({
   const canonicalCompletedTurnIds = useMemo(() => Array.from(new Set([
     ...completedTurnIds,
     ...(!completionIdsProvided && !hasPendingToolCalls && historyActiveTurnId === null
-      ? completedAssistantTurnIds(projectWebuiThreadMessages(historical))
+      ? completedAssistantTurnIds(normalizedHistory)
       : []),
-  ])), [completedTurnIds, completionIdsProvided, hasPendingToolCalls, historical, historyActiveTurnId]);
+  ])), [completedTurnIds, completionIdsProvided, hasPendingToolCalls, normalizedHistory, historyActiveTurnId]);
 
   const lastRunTurnId = chatId ? client.getRunTurnId(chatId) : null;
   const completedRunTurnId = chatId && lastRunTurnId && client.isRunCompleted(chatId, lastRunTurnId)
@@ -1317,7 +1351,6 @@ export function ThreadShell({
         )
       )
     );
-    const normalizedHistory = projectWebuiThreadMessages(historical);
     // Completion is a fact about a turn, even when a newer local turn prevents
     // this snapshot from settling the conversation's current run.
     client.fenceCanonicalCompletedTurns(chatId, canonicalCompletedTurnIds);
@@ -1426,6 +1459,7 @@ export function ThreadShell({
     canonicalCompletedTurnIds,
     completionIdsProvided,
     historical,
+    normalizedHistory,
     historyVersion,
     historyContinuity,
     historyLineage,
@@ -1878,7 +1912,7 @@ export function ThreadShell({
   );
 
   const composer = (
-    <>
+    <div className={composerVariant === "hero" ? "thread-composer-stack is-hero" : "thread-composer-stack"}>
       {modelFallback?.chatId === chatId && !modelFallback.dismissed ? (
         <ModelFallbackNotice
           model={modelFallback.model}
@@ -1895,12 +1929,14 @@ export function ThreadShell({
           state={recoveryState}
           onContinue={continueRecovery}
           onDismiss={dismissRecovery}
+          onOpenSettings={onOpenModelSettings}
         />
       ) : null}
       {streamError && !hasInlineDeliveryError(messages, streamError) ? (
         <StreamErrorNotice
           error={streamError}
           onDismiss={dismissStreamError}
+          onOpenSettings={onOpenModelSettings}
         />
       ) : null}
       {session ? (
@@ -2017,13 +2053,11 @@ export function ThreadShell({
           onQuotedContextChange={setQuotedContext}
         />
       )}
-    </>
+    </div>
   );
 
-  const emptyState = loading ? (
-    <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-      {t("thread.loadingConversation")}
-    </div>
+  const emptyState = initialHistoryLoading ? (
+    <ThreadLoadingSkeleton />
   ) : (
     <div className="flex w-full flex-col items-center text-center animate-in fade-in-0 slide-in-from-bottom-2 [animation-duration:220ms] motion-reduce:animate-none">
       <HeroGreeting text={t(heroGreetingKey)} />
@@ -2111,6 +2145,7 @@ export function ThreadShell({
             runStartedAt={currentRunStartedAt}
             retryStatus={retryStatus}
             emptyState={emptyState}
+            initialLoading={initialHistoryLoading}
             composer={composerPortalTarget === undefined ? composer : null}
             activeTurnId={viewportTurnId}
             activeTurnStartedHere={activeTurnStartedHere}
@@ -2122,7 +2157,7 @@ export function ThreadShell({
             slashCommands={availableSlashCommands}
             forkBoundaryMessageCount={forkBoundaryMessageCount}
             hasMoreBefore={hasMoreBefore}
-            loadingOlder={loadingOlder}
+            loadingOlder={loadingOlder || olderPageProjectionPending}
             olderError={olderError}
             userMessageOffset={userMessageOffset}
             onLoadOlder={loadOlder}

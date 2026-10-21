@@ -20,10 +20,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Generator, Literal, cast
 
-from filelock import FileLock
+from filelock import FileLock, Timeout
+from loguru import logger
 
 from nanobot.config.home import get_selected_home_path
 from nanobot.config.paths import get_data_dir
+from nanobot.gateway.windows_shutdown import WindowsShutdownEvent, request_windows_shutdown
 from nanobot.process_runtime import (
     ManagedProcessRuntime,
     ProcessResult,
@@ -235,6 +237,7 @@ class GatewayRuntime(ManagedProcessRuntime[GatewayStartOptions]):
             subprocess_run=subprocess_run,
             sleep=sleep,
         )
+        self._shutdown_signal: WindowsShutdownEvent | None = None
 
     def _build_child_command(self, options: GatewayStartOptions) -> list[str]:
         return build_gateway_command(self.python_executable, options)
@@ -339,12 +342,66 @@ class GatewayRuntime(ManagedProcessRuntime[GatewayStartOptions]):
 
     @contextmanager
     def foreground_instance(self, options: GatewayStartOptions) -> Generator[None]:
-        """Publish this foreground gateway while it is available to local clients."""
-        self._claim_current_process(options)
+        """Publish this process and own its stop signal across asyncio.run()."""
+        shutdown_signal = None
+        if self.platform_name == "Windows" and os.name == "nt":
+            identity = self.process_identity(os.getpid())
+            if not isinstance(identity, str):
+                raise OSError("Cannot identify the gateway process for Windows shutdown")
+            shutdown_signal = WindowsShutdownEvent(os.getpid(), identity)
+        self._shutdown_signal = shutdown_signal
         try:
-            yield
+            self._claim_current_process(options)
+            try:
+                yield
+            finally:
+                self._release_current_process()
         finally:
-            self._release_current_process()
+            self._shutdown_signal = None
+            if shutdown_signal is not None:
+                shutdown_signal.close()
+
+    async def wait_for_shutdown_request(self, shutdown_event: asyncio.Event) -> None:
+        """Bridge the local Windows signal to the application's existing shutdown."""
+        signal = self._shutdown_signal
+        if signal is None:
+            return
+        waiter = asyncio.create_task(asyncio.to_thread(signal.wait))
+        try:
+            await asyncio.shield(waiter)
+            logger.info("Gateway shutdown requested by local CLI")
+            shutdown_event.set()
+        finally:
+            # Cancelling to_thread alone leaves its native wait alive. Wake it
+            # before asyncio.run drains the executor and the owner closes the handle.
+            signal.signal()
+            await waiter
+
+    def _terminate_windows(self, pid: int, *, timeout_s: int) -> bool:
+        state = self._read_state()
+        identity = self._process_identity(pid)
+        if identity is None:
+            return not self._is_pid_running(pid)
+        if self._process_identity_match(state, pid) != "match":
+            return False
+        requested = False
+        if isinstance(identity, str) and state is not None:
+            try:
+                requested = request_windows_shutdown(pid, identity, state.get("shutdown_token"))
+            except OSError as exc:
+                logger.warning("Could not request gateway shutdown: {}", exc)
+        if requested and self._wait_for_exit(pid, timeout_s):
+            return True
+        current_identity = self._process_identity(pid)
+        if current_identity is None:
+            return not self._is_pid_running(pid)
+        if current_identity != identity:
+            return False
+        if requested:
+            logger.warning("Gateway did not exit within {}s; forcing PID tree {}", timeout_s, pid)
+        else:
+            logger.warning("Gateway shutdown signal unavailable; forcing PID tree {}", pid)
+        return super()._terminate_windows(pid, timeout_s=timeout_s)
 
     def _claim_current_process(self, options: GatewayStartOptions) -> GatewayLaunchMode:
         lease = GatewayClientLease(self, kind="gateway-foreground")
@@ -389,6 +446,9 @@ class GatewayRuntime(ManagedProcessRuntime[GatewayStartOptions]):
                 state.pop("pending_pid_handoff", None)
                 state.pop("stable_identity", None)
                 state.update(self.process_identity_record(pid))
+                state.pop("shutdown_token", None)
+                if self._shutdown_signal is not None:
+                    state["shutdown_token"] = self._shutdown_signal.token
                 self._write_state(state)
                 if launch_mode == "foreground":
                     lease._try_mark_persistent_locked()
@@ -521,7 +581,13 @@ class GatewayClientLease:
 
     def begin_orphan_shutdown(self) -> bool:
         """Commit shutdown only while an on-demand gateway still has no clients."""
-        with self.transition_lock, self.lifecycle_lock, self.lock:
+        # Explicit stop holds this lock while waiting for us to exit. Never
+        # block the gateway loop (or an executor being drained) behind it.
+        try:
+            transition = self.transition_lock.acquire(timeout=0)
+        except Timeout:
+            return False
+        with transition, self.lifecycle_lock, self.lock:
             state = self._live_state()
             if not bool(state.get("auto_stop")) or self._clients(state):
                 self._write_or_clear(state)

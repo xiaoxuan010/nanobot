@@ -10,6 +10,7 @@ import type {
   ConnectionStatus,
   GoalStateWsPayload,
   InboundEvent,
+  UIMediaAttachment,
   UIMessage,
 } from "@/lib/types";
 import { ClientProvider } from "@/providers/ClientProvider";
@@ -418,7 +419,7 @@ describe("useNanobotStream", () => {
       requestFrame.mockRestore();
       now.mockRestore();
       if (descriptor) Object.defineProperty(document, "visibilityState", descriptor);
-      else delete (document as Document & { visibilityState?: string }).visibilityState;
+      else Reflect.deleteProperty(document, "visibilityState");
       vi.useRealTimers();
     }
   });
@@ -466,7 +467,7 @@ describe("useNanobotStream", () => {
       if (visibilityDescriptor) {
         Object.defineProperty(document, "visibilityState", visibilityDescriptor);
       } else {
-        delete (document as Document & { visibilityState?: DocumentVisibilityState }).visibilityState;
+        Reflect.deleteProperty(document, "visibilityState");
       }
       vi.useRealTimers();
     }
@@ -724,6 +725,36 @@ describe("useNanobotStream", () => {
     expect(result.current.isStreaming).toBe(false);
     expect(fake.client.finishRunLocally).toHaveBeenCalledWith("chat-recovery");
   });
+
+  it.each(["awaiting_user", "resuming"] as const)(
+    "reconciles a missed model recovery event after reconnecting to %s",
+    (status) => {
+      const fake = fakeClient();
+      const { result } = renderHook(() => useNanobotStream("chat-recovery", EMPTY_MESSAGES), {
+        wrapper: wrap(fake.client),
+      });
+      act(() => {
+        fake.emit("chat-recovery", {
+          event: "turn_end", chat_id: "chat-recovery",
+          outcome: "failed", failure_kind: "model", failure_error_kind: "connection",
+        });
+      });
+      expect(result.current.streamError?.kind).toBe("model_request_failed");
+      act(() => {
+        fake.emit("chat-recovery", {
+          event: "attached", chat_id: "chat-recovery",
+          recovery_state: {
+            recovery_id: "recovery-1", status,
+            reason: status === "resuming" ? "user_confirmed" : "model_request_failed",
+            failure_error_kind: "connection",
+          },
+        });
+      });
+      expect(result.current.streamError).toBeNull();
+      expect(result.current.recoveryState?.status).toBe(status);
+      expect(result.current.isStreaming).toBe(status === "resuming");
+    },
+  );
 
   it("does not let historical recovered state clear a later active turn", () => {
     const fake = fakeClient();
@@ -2340,23 +2371,23 @@ describe("useNanobotStream", () => {
       { wrapper: wrap(fake.client) },
     );
 
-    let submitted: ReturnType<typeof result.current.send> = null;
+    const submitted: { current: ReturnType<typeof result.current.send> } = { current: null };
     act(() => {
-      submitted = result.current.send("bind the camera");
+      submitted.current = result.current.send("bind the camera");
     });
 
-    expect(submitted).not.toBeNull();
-    expect(submitted?.sideChannel).toBe(false);
+    expect(submitted.current).not.toBeNull();
+    expect(submitted.current?.sideChannel).toBe(false);
     expect(result.current.messages[0]).toMatchObject({
-      id: submitted?.userMessageId,
-      turnId: submitted?.turnId,
+      id: submitted.current?.userMessageId,
+      turnId: submitted.current?.turnId,
       role: "user",
     });
     expect(fake.client.sendMessage).toHaveBeenCalledWith(
       "chat-submitted-turn",
       "bind the camera",
       undefined,
-      expect.objectContaining({ turnId: submitted?.turnId }),
+      expect.objectContaining({ turnId: submitted.current?.turnId }),
     );
   });
 
@@ -2840,12 +2871,16 @@ describe("useNanobotStream", () => {
       wrapper: wrap(fake.client),
     });
 
+    // Some peers include a kind hint in addition to the message envelope's URL.
+    const media = {
+      kind: "image", url: "/api/media/sig/html", name: "index.html",
+    } satisfies UIMediaAttachment;
     act(() => {
       fake.emit("chat-mislabelled-html", {
         event: "message",
         chat_id: "chat-mislabelled-html",
         text: "file ready",
-        media_urls: [{ kind: "image", url: "/api/media/sig/html", name: "index.html" }],
+        media_urls: [media],
       });
     });
 

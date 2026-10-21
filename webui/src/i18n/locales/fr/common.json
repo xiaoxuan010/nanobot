@@ -479,6 +479,7 @@
       "byok": "BYOK",
       "overview": "Vue d’ensemble",
       "appearance": "Apparence",
+      "notifications": "Notifications",
       "models": "Modèles",
       "providers": "Fournisseurs",
       "image": "Images",
@@ -516,6 +517,41 @@
       "hostSafety": "Sécurité de l’app",
       "voiceInput": "Transcription"
     },
+    "notifications": {
+      "scope": "Ce navigateur",
+      "intro": "Choisissez comment recevoir une alerte à la fin d’une tâche.",
+      "pageRequired": "Aucune nouvelle alerte si cette page est fermée, suspendue ou déconnectée.",
+      "revoked": "L’autorisation d’afficher des notifications a été révoquée. Les notifications sont désormais désactivées. Autorisez-les dans les paramètres du navigateur pour ce site, puis activez-les ici.",
+      "retry": "Vérifier à nouveau",
+      "statusOff": "Désactivées",
+      "statusPermission": "Autorisation requise",
+      "statusOn": "Activées",
+      "statusBlocked": "Bloquées",
+      "statusRevoked": "Autorisation révoquée",
+      "statusUnavailable": "Indisponibles",
+      "statusWorker": "Pas prêt",
+      "statusBusy": "Vérification…",
+      "statusError": "Échec de l’envoi",
+      "test": "Tester les notifications",
+      "testBody": "Ceci est une notification de test.",
+      "waiting": "En attente du navigateur…",
+      "insecure": "Ouvrez nanobot via HTTPS ou localhost pour utiliser les notifications.",
+      "unsupported": "Ce navigateur ne prend pas en charge les notifications. Essayez-en un autre ; sur iPhone ou iPad, ouvrez nanobot depuis l’écran d’accueil.",
+      "denied": "Les notifications sont bloquées. Autorisez-les dans les paramètres du navigateur pour ce site, puis activez-les ici.",
+      "dismissed": "L’autorisation n’a pas été accordée. Activez les notifications et choisissez Autoriser.",
+      "permissionFailed": "Impossible de demander l’autorisation. Réessayez dans un navigateur compatible.",
+      "workerUnavailable": "Le service de notifications n’est pas prêt. Vérifiez à nouveau ou rechargez cette page.",
+      "displayFailed": "Le navigateur n’a pas pu envoyer la notification. Vérifiez les autorisations du site, puis réessayez.",
+      "submitted": "Transmise au navigateur. Si elle n’apparaît pas, vérifiez les notifications système et le mode Ne pas déranger.",
+      "completed": "Tâche terminée. Cliquez pour voir le résultat.",
+      "failed": "La tâche a échoué. Cliquez pour les détails.",
+      "interrupted": "La tâche demande votre attention. Cliquez pour continuer."
+    },
+    "readingTextSize": {
+      "small": "Texte de lecture : petit",
+      "standard": "Texte de lecture : standard",
+      "large": "Texte de lecture : grand"
+    },
     "rows": {
       "theme": "Thème",
       "language": "Langue",
@@ -529,6 +565,7 @@
       "pendingChanges": "Modifications en attente",
       "selectedPreset": "Préréglage sélectionné",
       "presetModel": "Modèle du préréglage",
+      "readingTextSize": "Taille du texte de lecture",
       "activityMode": "Détails de l’activité",
       "fileEditDisplay": "Aperçu des modifications",
       "codeWrap": "Retour à la ligne du code",
@@ -550,7 +587,7 @@
       "webuiDefaultAccess": "Accès par défaut",
       "currentModel": "Configuration actuelle",
       "brandLogos": "Logos de marque",
-      "browserNotifications": "Notifications de tâches",
+      "browserNotifications": "Notifications du navigateur",
       "notificationSound": "Son de fin",
       "cliAppsCatalog": "Catalogue",
       "cliAppsFilter": "Filtre",
@@ -594,8 +631,8 @@
       "selectedModelProvider": "Défini par le modèle sélectionné.",
       "selectedModelValue": "Défini par le modèle sélectionné.",
       "brandLogos": "Affichez les logos des fournisseurs et applications dans les réglages.\n\nAffiche les logos de fournisseurs tiers et CLI dans les Réglages.",
-      "browserNotifications": "Notifiez quand cette page est en arrière-plan. Désactivé par défaut.",
-      "notificationSound": "Émettez un son à la fin des réponses. Désactivé par défaut.\n\nJoue un bref carillon lorsqu’un tour se termine, même si cette page est en arrière-plan. Désactivé par défaut.",
+      "browserNotifications": "Recevez les notifications des tâches lorsque cette page est en arrière-plan.",
+      "notificationSound": "Joue un son à la fin d’une réponse, même en arrière-plan.",
       "cliAppsCatalog": "Installez des outils CLI pour nanobot ; les applications de bureau restent inchangées.\n\nInstalle les outils en ligne de commande que nanobot peut utiliser sur cette machine. Les applications de bureau ne sont pas modifiées.",
       "cliAppsFilter": "Recherchez par nom, catégorie ou fonction.",
       "logs": "Ouvrez le dossier des journaux du moteur de l’application de bureau.",
@@ -1961,8 +1998,8 @@
     "loadEarlier": "Charger les messages précédents",
     "history": {
       "loading": "Chargement des messages précédents…",
-      "error": "Échec du chargement.",
-      "retry": "Réessayer"
+      "exhausted": "Aucun message plus ancien",
+      "retryLabel": "Échec du chargement. Réessayer"
     },
     "forkedFromHistory": "Bifurqué depuis l'historique",
     "promptNavigator": {
@@ -2345,6 +2382,8 @@
       "body": "La passerelle a refusé ce message. Vérifiez le texte ou les pièces jointes, puis réessayez."
     },
     "modelRequestFailed": {
+      "authenticationTitle": "Échec de l’autorisation du fournisseur du modèle",
+      "authenticationBody": "Reconnectez-vous ou vérifiez la clé API dans les paramètres du modèle.",
       "billingTitle": "Quota du fournisseur du modèle indisponible",
       "billingBody": "Ajoutez du crédit ou vérifiez la facturation du compte fournisseur, puis réessayez.",
       "connectionTitle": "Impossible de se connecter au fournisseur du modèle",
@@ -2352,8 +2391,8 @@
       "rateLimitTitle": "Limite de requêtes du fournisseur du modèle atteinte",
       "serverTitle": "Erreur du service du fournisseur du modèle",
       "unknownTitle": "Échec de la requête au fournisseur du modèle",
-      "bodyWithAttempt": "La requête a encore échoué à la tentative {{attempts}} ; les nouvelles tentatives ont donc été arrêtées. Vérifiez la configuration ou l’état du fournisseur, puis réessayez.",
-      "body": "Vérifiez la configuration ou l’état du fournisseur, puis réessayez."
+      "bodyWithAttempt": "Arrêt après {{attempts}} tentatives. Réessayez plus tard ou choisissez un autre modèle.",
+      "body": "Réessayez plus tard ou choisissez un autre modèle."
     }
   },
   "workspace": {

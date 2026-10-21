@@ -21,7 +21,7 @@ from nanobot.gateway import (
     RuntimeResult,
 )
 from nanobot.gateway.runtime import monitor_gateway_clients
-from nanobot.process_runtime import process_is_running
+from nanobot.process_runtime import ManagedProcessRuntime, process_is_running
 from nanobot.utils.rotating_output import (
     BACKGROUND_LOG_BACKUP_COUNT_ENV,
     BACKGROUND_LOG_MAX_BYTES_ENV,
@@ -1263,7 +1263,7 @@ def test_terminate_windows_targets_only_the_recorded_process_tree(tmp_path, monk
     def fake_run(command, **kwargs):
         taskkill_calls.append({"command": command, "kwargs": kwargs})
 
-    runtime = GatewayRuntime(
+    runtime = ManagedProcessRuntime(
         paths=_paths(tmp_path),
         platform_name="Windows",
         subprocess_run=fake_run,
@@ -1277,23 +1277,61 @@ def test_terminate_windows_targets_only_the_recorded_process_tree(tmp_path, monk
 
     def fake_wait_for_exit(_pid, _timeout_s):
         wait_timeouts.append(_timeout_s)
-        # Simulate a process that only exits after the taskkill fallback runs.
+        # Simulate a process that exits only after its tree is forcibly terminated.
         return bool(taskkill_calls)
 
     monkeypatch.setattr(runtime, "_wait_for_exit", fake_wait_for_exit)
 
     assert runtime._terminate_windows(12345, timeout_s=20) is True
-    assert wait_timeouts == [20]
+    assert wait_timeouts == [2]
     assert taskkill_calls == [
         {
-            "command": ["taskkill", "/PID", "12345", "/T"],
+            "command": ["taskkill", "/PID", "12345", "/T", "/F"],
             "kwargs": {
                 "check": False,
                 "stdout": subprocess.DEVNULL,
                 "stderr": subprocess.DEVNULL,
+                "timeout": 2,
             },
         }
     ]
+
+
+def test_orphan_shutdown_yields_to_an_explicit_lifecycle_transition(tmp_path):
+    runtime = GatewayRuntime(paths=_paths(tmp_path))
+    lease = GatewayClientLease(runtime, kind="gateway-monitor")
+    lease.mark_ephemeral()
+
+    with runtime._transition_lock():
+        assert lease.begin_orphan_shutdown() is False
+        assert "stopping" not in json.loads(lease.state_path.read_text(encoding="utf-8"))
+
+    assert lease.begin_orphan_shutdown() is True
+
+
+def test_windows_stop_does_not_force_a_pid_reused_during_grace(tmp_path, monkeypatch):
+    killed = []
+    runtime = GatewayRuntime(
+        paths=_paths(tmp_path), platform_name="Windows",
+        subprocess_run=lambda *args, **kwargs: killed.append(args),
+    )
+    identity = "original-process"
+    runtime._write_state({"pid": 12345, "identity": identity, "shutdown_token": "a" * 32})
+    monkeypatch.setattr(runtime, "_process_identity", lambda _pid: identity)
+    monkeypatch.setattr(runtime, "_is_pid_running", lambda _pid: True)
+    monkeypatch.setattr("nanobot.gateway.runtime.request_windows_shutdown", lambda *_args: True)
+
+    def exit_and_reuse_pid(_pid, _timeout):
+        nonlocal identity
+        identity = "replacement-process"
+        return False
+
+    monkeypatch.setattr(runtime, "_wait_for_exit", exit_and_reuse_pid)
+
+    result = runtime.stop(timeout_s=1)
+
+    assert result.status.running is False
+    assert killed == []
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX process groups are unavailable")
