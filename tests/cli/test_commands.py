@@ -2234,7 +2234,7 @@ def test_heartbeat_empty_response_is_not_evaluated(
         monkeypatch,
         config,
         make_provider=lambda _config: provider,
-        message_bus=lambda: bus,
+        message_bus=lambda **_kwargs: bus,
         session_manager=_FakeSessionManager,
         cron_service=_FakeCron,
     )
@@ -3272,7 +3272,7 @@ def test_gateway_unbound_agent_cron_is_skipped(
         "nanobot.providers.factory.load_provider_snapshot",
         lambda _config_path=None: _test_provider_snapshot(provider, config),
     )
-    monkeypatch.setattr("nanobot.bus.queue.MessageBus", lambda: bus)
+    monkeypatch.setattr("nanobot.bus.queue.MessageBus", lambda **_kwargs: bus)
 
     class _FakeSession:
         def __init__(self) -> None:
@@ -3400,7 +3400,7 @@ def test_gateway_bound_cron_runs_as_session_turn(
         "nanobot.providers.factory.load_provider_snapshot",
         lambda _config_path=None: _test_provider_snapshot(provider, config),
     )
-    monkeypatch.setattr("nanobot.bus.queue.MessageBus", lambda: bus)
+    monkeypatch.setattr("nanobot.bus.queue.MessageBus", lambda **_kwargs: bus)
 
     class _FakeSessionManager(_EmptyGatewaySessionManager):
         def __init__(self, _workspace: Path) -> None:
@@ -3599,7 +3599,7 @@ def test_gateway_local_trigger_queue_submits_agent_turns(
     _patch_cli_command_runtime(
         monkeypatch,
         config,
-        message_bus=lambda: bus,
+        message_bus=lambda **_kwargs: bus,
         session_manager=lambda _workspace: _FakeSessionManager(),
         cron_service=lambda _store_path, **_kwargs: _FakeCronService(),
     )
@@ -3979,7 +3979,7 @@ def test_gateway_health_endpoint_binds_and_serves_expected_responses(
         async def serve_forever(self) -> None:
             raise _StopGatewayError("stop")
 
-    async def _fake_start_server(handler, host: str, port: int):
+    async def _fake_start_server(handler, host: str, port: int, **_kwargs):
         captured["handler"] = handler
         captured["host"] = host
         captured["port"] = port
@@ -3989,7 +3989,7 @@ def test_gateway_health_endpoint_binds_and_serves_expected_responses(
         def __init__(self, payload: bytes) -> None:
             self.payload = payload
 
-        async def read(self, _size: int) -> bytes:
+        async def readuntil(self, _separator: bytes) -> bytes:
             return self.payload
 
     class _FakeWriter:
@@ -4069,17 +4069,17 @@ def test_gateway_health_endpoint_binds_and_serves_expected_responses(
             started = 0
 
             class _BlockingReader:
-                async def read(self, _size: int) -> bytes:
+                async def readuntil(self, _separator: bytes) -> bytes:
                     nonlocal started
                     started += 1
-                    if started == cli_gateway_runtime._GATEWAY_HEALTH_MAX_CONNECTIONS:
+                    if started == 64:
                         all_started.set()
                     await release.wait()
                     return b"GET /health HTTP/1.1\r\n\r\n"
 
             active_writers = [
                 _FakeWriter()
-                for _ in range(cli_gateway_runtime._GATEWAY_HEALTH_MAX_CONNECTIONS)
+                for _ in range(64)
             ]
             active_tasks = [
                 asyncio.create_task(health_handler(_BlockingReader(), writer))
@@ -4101,14 +4101,9 @@ def test_gateway_health_endpoint_binds_and_serves_expected_responses(
         asyncio.run(_exercise_connection_limit())
 
         class _NeverRespondingReader:
-            async def read(self, _size: int) -> bytes:
+            async def readuntil(self, _separator: bytes) -> bytes:
                 await asyncio.Event().wait()
 
-        monkeypatch.setattr(
-            cli_gateway_runtime,
-            "_GATEWAY_HEALTH_READ_TIMEOUT_SECONDS",
-            0.01,
-        )
         timed_out_writer = _FakeWriter()
         asyncio.run(health_handler(_NeverRespondingReader(), timed_out_writer))
         assert timed_out_writer.closed is True
@@ -4218,7 +4213,7 @@ def test_gateway_agent_task_owns_initial_mcp_provider_close(
         async def serve_forever(self) -> None:
             raise _StopGatewayError("stop")
 
-    async def _fake_start_server(_handler, _host: str, _port: int):
+    async def _fake_start_server(_handler, _host: str, _port: int, **_kwargs):
         return _FakeServer()
 
     _patch_cli_command_runtime(
@@ -4355,7 +4350,7 @@ def test_gateway_shutdown_event_exits_forever_runtime_tasks(
         async def serve_forever(self) -> None:
             await asyncio.Event().wait()
 
-    async def _fake_start_server(_handler, _host: str, _port: int):
+    async def _fake_start_server(_handler, _host: str, _port: int, **_kwargs):
         return _FakeServer()
 
     install_shutdown_handlers = cli_gateway_runtime._install_gateway_shutdown_handlers
