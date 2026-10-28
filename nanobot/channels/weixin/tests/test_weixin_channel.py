@@ -798,6 +798,7 @@ async def test_manager_surfaces_actionable_weixin_auth_error_without_traceback(
         lambda message, *args: tracebacks.append(message.format(*args)),
     )
     manager = manager_mod.ChannelManager.__new__(manager_mod.ChannelManager)
+    manager._metrics = None
     manager._channel_errors = {}
     manager.bus = channel.bus
 

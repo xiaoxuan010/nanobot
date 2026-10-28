@@ -116,6 +116,7 @@ def test_channel_manager_preserves_weixin_quota_defaults(
 @pytest.mark.asyncio
 async def test_channel_manager_does_not_retry_permanent_weixin_error(monkeypatch) -> None:
     manager = ChannelManager.__new__(ChannelManager)
+    manager._metrics = None
     manager.config = Config.model_validate({"channels": {"sendMaxRetries": 3}})
     manager.bus = MessageBus()
     channel = _channel()
