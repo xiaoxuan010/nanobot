@@ -11,7 +11,6 @@ import subprocess
 import sys
 import threading
 import time
-import venv
 from dataclasses import replace
 from pathlib import Path, PureWindowsPath
 from unittest.mock import AsyncMock
@@ -191,7 +190,7 @@ def test_planning_probe_bootstraps_before_target_site(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def installation(tmp_path, monkeypatch, request):
+def installation(tmp_path, monkeypatch, request, create_integration_env):
     # Synthetic local packages are not signed public releases. Approval refusal
     # is covered through the real feed in test_release_trust.py.
     monkeypatch.setattr(ReleaseFeed, "_authorize", AsyncMock())
@@ -202,8 +201,7 @@ def installation(tmp_path, monkeypatch, request):
     artifacts = tmp_path / "artifacts"
     artifacts.mkdir()
     environment = tmp_path / "venv with spaces"
-    venv.EnvBuilder(with_pip=True).create(environment)
-    python = str(environment / ("Scripts/python.exe" if os.name == "nt" else "bin/python"))
+    python = str(create_integration_env(environment))
     monkeypatch.setenv("PIP_CONFIG_FILE", os.devnull)
     monkeypatch.setenv("PIP_NO_INDEX", "1")
     monkeypatch.setenv("PIP_FIND_LINKS", str(artifacts))
@@ -1541,8 +1539,10 @@ async def test_stale_first_supervisor_cannot_take_new_confirmation(managed_insta
     assert not (directory / "approval.json").exists()
     assert not (installation_state_dir(spec.baseline.environment) / "stop.json").exists()
     # B retains its first supervision budget and completes the explicit retry.
+    # This path performs a real backup, pip install, restart and snapshot cleanup.
+    # Parallel Windows runners can exceed the stale-launcher's 40s rejection budget.
     try:
-        completed = await asyncio.to_thread(subprocess.run, [*command, current.id], capture_output=True, timeout=40)
+        completed = await asyncio.to_thread(subprocess.run, [*command, current.id], capture_output=True, timeout=120)
     except subprocess.TimeoutExpired:
         # Identify the blocked phase without exposing the confirmation nonce or
         # making a slow snapshot indistinguishable from a handoff deadlock.
@@ -1551,7 +1551,7 @@ async def test_stale_first_supervisor_cannot_take_new_confirmation(managed_insta
                     "mutation_started": status.mutation_started, "message": status.message,
                     "snapshot_complete": (directory / "program-backup.json").exists(),
                     "activation_complete": (directory / "activation.json").exists()}
-        pytest.fail(f"Confirmed supervisor exceeded 40s: {progress}", pytrace=False)
+        pytest.fail(f"Confirmed supervisor exceeded 120s: {progress}", pytrace=False)
     assert completed.returncode == 0, completed.stderr.decode()
     assert read_record(directory / "supervision.json")["confirmation_id"] == current.id
     assert JobStatus.read(directory).phase == Phase.SUCCEEDED

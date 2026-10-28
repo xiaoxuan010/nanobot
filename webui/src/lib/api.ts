@@ -1,3 +1,4 @@
+import { isCompactionPhase, isCompactionReason } from "../../../packages/client-events/notifications";
 import type {
   ApiServicePayload,
   AutomationChatsPayload,
@@ -206,6 +207,7 @@ export async function listSessions(
     run_started_at?: number | null;
     recovery_state?: RecoveryState | null;
     workspace_scope?: WorkspaceScopePayload | null;
+    project_locked?: boolean;
     handle?: SessionHandle | null;
   };
   const body = await request<{ sessions: Row[] }>(
@@ -227,6 +229,7 @@ export async function listSessions(
       runStartedAt: s.run_started_at ?? null,
       recoveryState: s.recovery_state ?? null,
       workspaceScope: s.workspace_scope ?? null,
+      projectLocked: s.project_locked ?? true,
       handle,
     };
   });
@@ -317,7 +320,17 @@ function parseThreadProjectionEvent(value: unknown): ThreadProjectionEvent {
   if (!isRecord(value) || typeof value.event !== "string" || typeof value.chat_id !== "string") {
     throw new Error("Invalid WebUI thread event");
   }
-  if (!hasValidProjectionMetadata(value)) {
+  if (!hasValidProjectionMetadata(value)
+    || (value.stream_id !== undefined && typeof value.stream_id !== "string")
+    || (value.projection_receipts !== undefined && (
+      !Array.isArray(value.projection_receipts)
+      || !value.projection_receipts.every((receipt: unknown) => isRecord(receipt)
+        && typeof receipt.turn_id === "string" && receipt.turn_id.length > 0
+        && Array.isArray(receipt.ranges)
+        && receipt.ranges.every((range: unknown) => Array.isArray(range)
+          && range.length === 2 && Number.isSafeInteger(range[0]) && range[0] >= 0
+          && Number.isSafeInteger(range[1]) && range[1] >= range[0]))
+    ))) {
     throw new Error("Invalid WebUI thread event metadata");
   }
   switch (value.event) {
@@ -371,7 +384,9 @@ function parseThreadProjectionEvent(value: unknown): ThreadProjectionEvent {
       if (value.text !== undefined && typeof value.text !== "string") break;
       return value as unknown as ThreadProjectionEvent;
     case "context_compaction":
-      if (typeof value.compaction_id !== "string" || typeof value.phase !== "string") break;
+      if (typeof value.compaction_id !== "string" || !value.compaction_id
+        || !isCompactionPhase(value.phase)
+        || (value.reason !== undefined && !isCompactionReason(value.reason))) break;
       return value as unknown as ThreadProjectionEvent;
     case "turn_end":
       return value as unknown as ThreadProjectionEvent;
@@ -1202,7 +1217,7 @@ export async function fetchProviderModels(
 
 export async function runMcpPresetAction(
   transport: WebUIMutationTransport,
-  action: "enable" | "disable" | "remove" | "test" | "reconnect",
+  action: "enable" | "disable" | "remove" | "test" | "reconnect" | "proxy",
   name: string,
   values: Record<string, string> = {},
 ): Promise<McpPresetsPayload> {

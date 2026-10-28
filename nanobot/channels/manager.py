@@ -205,13 +205,14 @@ class ChannelManager:
 
     def _build_channel(
         self,
-        name: str,
         cls: type[BaseChannel],
         section: Any,
         *,
         runtime_name: str | None = None,
     ) -> BaseChannel:
         kwargs: dict[str, Any] = {}
+        if cls.uses_shared_proxy:
+            kwargs["network"] = self.config.network
         if cls.name == "websocket":
             from nanobot.channels.websocket.runtime import WebSocketConfig
             from nanobot.webui.gateway_services import build_gateway_services
@@ -335,7 +336,6 @@ class ChannelManager:
                     (
                         runtime_name,
                         self._build_channel(
-                            name,
                             cls,
                             spec.config,
                             runtime_name=runtime_name,
@@ -595,7 +595,6 @@ class ChannelManager:
                 (
                     runtime_name,
                     self._build_channel(
-                        name,
                         cls,
                         spec.config,
                         runtime_name=runtime_name,

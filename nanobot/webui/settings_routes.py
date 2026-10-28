@@ -6,6 +6,7 @@ import asyncio
 import html
 import json
 from collections.abc import Awaitable, Callable, Mapping
+from functools import partial
 from typing import Any, cast
 
 from websockets.http11 import Request as WsRequest
@@ -17,6 +18,7 @@ from nanobot.bus.queue import MessageBus
 from nanobot.channels.registry import load_channel_plugin
 from nanobot.channels.validation import validate_channel_config
 from nanobot.pairing import approve_code, deny_code, list_pending
+from nanobot.pairing.events import PairingChanged
 from nanobot.webui import settings_capabilities as capability_domain
 from nanobot.webui import settings_contracts as contracts
 from nanobot.webui import settings_models as model_domain
@@ -98,6 +100,7 @@ _MCP_PRESET_ACTIONS_BY_PATH = {
     "/api/settings/mcp-presets/remove": "remove",
     "/api/settings/mcp-presets/test": "test",
     "/api/settings/mcp-presets/reconnect": "reconnect",
+    "/api/settings/mcp-presets/proxy": "proxy",
     "/api/settings/mcp-presets/custom": "custom",
     "/api/settings/mcp-presets/import": "import",
     "/api/settings/mcp-presets/import-cursor": "import-cursor",
@@ -544,6 +547,9 @@ class WebUISettingsRouter:
             reload_image=self._reload_image_generation_runtime,
         )
 
+    def _pairing_changed(self) -> None:
+        self.bus.publish_nowait(PairingChanged())
+
     def _system_operations(self) -> system_domain.SystemSettingsOperations:
         return system_domain.SystemSettingsOperations(
             update_runtime_config=update_runtime_config_settings,
@@ -555,8 +561,8 @@ class WebUISettingsRouter:
             validate_channel_config=validate_channel_config,
             load_channel_plugin=load_channel_plugin,
             list_pending=list_pending,
-            approve_code=approve_code,
-            deny_code=deny_code,
+            approve_code=partial(approve_code, on_change=self._pairing_changed),
+            deny_code=partial(deny_code, on_change=self._pairing_changed),
             mcp_presets_action=mcp_presets_settings_action,
             reload_mcp=self._reload_mcp_runtime,
             mcp_runtime_status=self._mcp_runtime_status,
@@ -657,7 +663,7 @@ class WebUISettingsRouter:
             return self._error_response(500, "MCP OAuth callback is not configured")
         query = self._parse_mcp_settings_query(request)
         try:
-            name, cfg = await asyncio.to_thread(
+            name, cfg, network = await asyncio.to_thread(
                 self.settings.mutate,
                 ensure_mcp_oauth_server,
                 query,
@@ -669,6 +675,7 @@ class WebUISettingsRouter:
                 cfg,
                 redirect_uri,
                 reload_mcp=self._reload_mcp_runtime,
+                network=network,
                 reset_credentials=reset,
             )
         except Exception as exc:

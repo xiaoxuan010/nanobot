@@ -107,7 +107,7 @@ def test_channel_manager_preserves_weixin_quota_defaults(
     config = Config.model_validate({"channels": {"weixin": section}})
     manager = ChannelManager(config, MessageBus(), config_path=tmp_path / "config.json")
 
-    channel = manager._build_channel("weixin", WeixinChannel, section)
+    channel = manager._build_channel(WeixinChannel, section)
 
     assert channel.send_progress is send_progress
     assert channel.send_tool_hints is send_tool_hints

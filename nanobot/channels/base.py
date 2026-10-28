@@ -11,6 +11,7 @@ from loguru import logger
 
 from nanobot.bus.events import InboundMessage, OutboundMessage
 from nanobot.bus.queue import MessageBus
+from nanobot.config.network import NetworkConfig
 from nanobot.pairing import (
     PAIRING_CODE_META_KEY,
     format_pairing_reply,
@@ -18,6 +19,7 @@ from nanobot.pairing import (
     is_approved,
     record_delivery,
 )
+from nanobot.pairing.events import PairingChanged
 
 if TYPE_CHECKING:
     from nanobot.agent.tools.registry import ToolRegistry
@@ -34,21 +36,27 @@ class BaseChannel(ABC):
 
     name: str = "base"
     display_name: str = "Base"
+    # Opt-in construction capability, not a channel configuration field.
+    uses_shared_proxy: bool = False
     send_progress: bool = True
     send_tool_hints: bool = True
     show_reasoning: bool = True
     show_compaction_notices: bool = False
     command_predicate: Callable[[str], bool] | None = None
 
-    def __init__(self, config: Any, bus: MessageBus):
+    def __init__(
+        self, config: Any, bus: MessageBus, *, network: NetworkConfig | None = None,
+    ):
         """
         Initialize the channel.
 
         Args:
             config: Channel-specific configuration.
             bus: The message bus for communication.
+            network: Instance-scoped shared network settings.
         """
         self.config = config
+        self.network = network if network is not None else NetworkConfig()
         self.logger = logger.bind(channel=self.name)
         self.bus = bus
         self._running = False
@@ -285,6 +293,9 @@ class BaseChannel(ABC):
         permission_id = authorization_id if authorization_id is not None else sender_id
         return self.is_allowed(permission_id)
 
+    def _pairing_changed(self) -> None:
+        self.bus.publish_nowait(PairingChanged())
+
     async def _handle_message(
         self,
         sender_id: str,
@@ -308,7 +319,7 @@ class BaseChannel(ABC):
         if not self.is_message_allowed(sender_id, chat_id, authorization_id):
             if is_dm:
                 try:
-                    code = generate_code(self.name, str(sender_id))
+                    code = generate_code(self.name, str(sender_id), on_change=self._pairing_changed)
                 except OSError:
                     # Transient pairing-store I/O failure: skip the pairing
                     # reply for this message rather than crash the handler.
@@ -316,7 +327,7 @@ class BaseChannel(ABC):
                         "Pairing store unavailable; dropping DM from {}", sender_id
                     )
                     return
-                record_delivery(code, "sending")
+                record_delivery(code, "sending", on_change=self._pairing_changed)
                 try:
                     await self.send(
                         OutboundMessage(
@@ -327,9 +338,9 @@ class BaseChannel(ABC):
                         )
                     )
                 except Exception:
-                    record_delivery(code, "failed")
+                    record_delivery(code, "failed", on_change=self._pairing_changed)
                     raise
-                record_delivery(code, "sent")
+                record_delivery(code, "sent", on_change=self._pairing_changed)
                 self.logger.info(
                     "Sent pairing code {} to sender {} in chat {}",
                     code, sender_id, chat_id,

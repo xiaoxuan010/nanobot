@@ -7,15 +7,17 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Activity, Check, ChevronRight, CircleAlert, Clock3, Copy, Link2, Quote, Wrench } from "lucide-react";
+import { Activity, Check, ChevronRight, CircleAlert, Clock3, Copy, Quote, Wrench } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { DisclosureContent } from "@/components/ui/disclosure";
 
 import { AttachmentTile } from "@/components/AttachmentTile";
+import { CodeBlock } from "@/components/CodeBlock";
 import { SessionHandleLabel } from "@/components/SessionHandleLabel";
 import { FallbackResponseSources } from "@/components/ResponseSourceBadge";
 import { ImageGallery } from "@/components/ImageGallery";
 import { InlineImageProvider, useInlineImages } from "@/components/InlineImageContext";
+import { INLINE_REFERENCE_HIGHLIGHT_COLOR, InlineTokenHighlight } from "@/components/InlineTokenHighlight";
 import { MarkdownText } from "@/components/MarkdownText";
 import { SlashCommandText } from "@/components/SlashCommandText";
 import { ReasoningRow } from "@/components/thread/activity/ReasoningRow";
@@ -106,6 +108,7 @@ function useMessageCopy(content: string) {
 }
 
 function messageCopyContent(message: UIMessage, t: (key: string) => string) {
+  if (message.renderAs === "text") return message.content;
   return message.role === "assistant" && message.compactReply === "empty"
     ? t("thread.compaction.empty")
     : message.role === "assistant" && message.compactReply === "failed"
@@ -145,7 +148,6 @@ interface MessageBlockMenuActionsProps {
   isTurnStreaming?: boolean;
   onForkFromHere?: () => void;
   activity?: MessageBlockMenuActivity;
-  onViewLinks?: () => void;
   sheet?: boolean;
 }
 
@@ -155,7 +157,6 @@ export function MessageBlockMenuActions({
   isTurnStreaming = false,
   onForkFromHere,
   activity,
-  onViewLinks,
   sheet = false,
 }: MessageBlockMenuActionsProps) {
   const { t } = useTranslation();
@@ -248,10 +249,6 @@ export function MessageBlockMenuActions({
             ) : null}
           </div>
         ) : null}
-        {onViewLinks ? <button type="button" data-message-links-trigger onClick={onViewLinks}
-          className="flex min-h-[var(--message-block-control-size)] w-full items-center gap-2 rounded-control px-2 py-1.5 text-[13px] text-muted-foreground hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          <Link2 className="h-3.5 w-3.5" aria-hidden />{t("webPreview.viewLinks")}
-        </button> : null}
         <FallbackResponseSources
           sources={message.role === "assistant" ? message.responseSources : undefined}
           className="min-h-[var(--message-block-control-size)] gap-1"
@@ -393,7 +390,7 @@ function IncomingSessionMessage({
       <div className="mb-1.5 flex items-center px-4 text-[12px] text-muted-foreground">
         <SessionHandleLabel id={handle.id}>{handleName}</SessionHandleLabel>
       </div>
-      <div className="relative min-w-0 rounded-floating bg-secondary/70 px-4 py-2">
+      <div data-theme-surface className="relative min-w-0 rounded-floating bg-secondary/70 px-4 py-2">
         {contextMenu}
         <div data-assistant-selectable="true" className="min-w-0">
           <MarkdownText
@@ -458,7 +455,16 @@ export function MessageBubble({
       message.deliveryStatus === "sending" || message.deliveryStatus === "failed";
     const quotedContext = parsedMessage.quotedContext;
     const slashCommand = matchingSlashCommand(userContent, slashCommands);
-    const messageText = slashCommand ? (
+    const bangPrefix = /^(\s*)!/.exec(userContent);
+    const messageText = bangPrefix ? (
+      <>
+        {bangPrefix[1]}
+        <InlineTokenHighlight testId="message-shell-prefix" className="font-normal" color={INLINE_REFERENCE_HIGHLIGHT_COLOR}>
+          <span className="opacity-90">!</span>
+        </InlineTokenHighlight>
+        {userContent.slice(bangPrefix[0].length)}
+      </>
+    ) : slashCommand ? (
       <>
         <SlashCommandText command={slashCommand.command} />
         <UserMessageText
@@ -483,7 +489,7 @@ export function MessageBubble({
         {!hasText ? contextMenu : null}
         {hasImages ? <ImageGallery images={images} align="right" size="compact" /> : null}
         {!hasImages && hasMedia ? (
-          <MessageMedia media={media} align="right" />
+          <MessageMedia media={media} align="right" pending={message.deliveryStatus === "sending"} />
         ) : null}
         {quotedContext ? (
           <UserQuotedContext
@@ -495,6 +501,7 @@ export function MessageBubble({
           <div data-user-text-bubble className="relative ml-auto w-fit max-w-full min-w-0">
             {contextMenu}
             <p
+              data-theme-surface
               data-temporary-message={temporary ? "true" : undefined}
               className={cn(
                 "ml-auto w-fit max-w-full min-w-0 rounded-floating px-4 py-2",
@@ -520,11 +527,7 @@ export function MessageBubble({
     );
   }
 
-  const assistantContent = message.compactReply === "empty"
-    ? t("thread.compaction.empty")
-    : message.compactReply === "failed"
-      ? t("thread.compaction.failed")
-      : message.content;
+  const assistantContent = messageCopyContent(message, t);
   const empty = assistantContent.trim().length === 0;
   const media = message.media ?? [];
   const reasoning = message.role === "assistant" ? message.reasoning ?? "" : "";
@@ -548,14 +551,18 @@ export function MessageBubble({
       ) : empty && message.isStreaming ? null : (
         <InlineImageProvider>
           <div data-assistant-selectable={message.isStreaming ? undefined : "true"}>
-            {/* A mode switch rebuilds Streamdown's subtree and moves the scroll anchor. */}
-            <MarkdownText
-              streaming={!!message.isStreaming}
-              preserveStreamingLayout
-              onOpenFilePreview={onOpenFilePreview}
-            >
-              {assistantContent}
-            </MarkdownText>
+            {message.renderAs === "text" ? (
+              <CodeBlock language="text" code={assistantContent} highlight={false} ansi={false} />
+            ) : (
+              /* A mode switch rebuilds Streamdown's subtree and moves the scroll anchor. */
+              <MarkdownText
+                streaming={!!message.isStreaming}
+                preserveStreamingLayout
+                onOpenFilePreview={onOpenFilePreview}
+              >
+                {assistantContent}
+              </MarkdownText>
+            )}
           </div>
           {media.length > 0 ? <MessageMedia media={media} align="left" /> : null}
         </InlineImageProvider>
@@ -567,6 +574,8 @@ export function MessageBubble({
 function UserQuotedContext({ text, label }: { text: string; label: string }) {
   return (
     <blockquote
+      data-theme-surface
+      data-theme-ink
       className={cn(
         "ml-auto flex w-fit max-w-full min-w-0 items-start gap-2 rounded-control",
         "border border-border/60 bg-muted/35 px-3 py-2 text-left text-muted-foreground",
@@ -647,40 +656,52 @@ function mergeCliMentionApps(
 function MessageMedia({
   media,
   align,
+  pending = false,
 }: {
   media: UIMediaAttachment[];
   align: "left" | "right";
+  pending?: boolean;
 }) {
   const inlineImages = useInlineImages();
   if (media.length === 0) return null;
   const images: UIImage[] = [];
   const seen = new Set<string>();
-  const nonImages: UIMediaAttachment[] = [];
+  const videos: UIMediaAttachment[] = [];
+  const files: UIMediaAttachment[] = [];
   for (const item of media) {
     const normalized = toMediaAttachment(item);
     if (normalized.kind === "image") {
       if (normalized.url && (inlineImages.has(normalized.url) || seen.has(normalized.url))) continue;
       if (normalized.url) seen.add(normalized.url);
       images.push({ url: normalized.url, name: normalized.name });
+    } else if (normalized.kind === "video") {
+      videos.push(normalized);
     } else {
-      nonImages.push(normalized);
+      files.push(normalized);
     }
   }
-  if (images.length === 0 && nonImages.length === 0) return null;
+  if (images.length === 0 && videos.length === 0 && files.length === 0) return null;
 
   return (
     <div
       className={cn(
-        "mt-2 flex flex-wrap gap-2",
-        align === "right" ? "justify-end" : "justify-start",
+        "mt-2 flex min-w-0 max-w-full flex-col gap-2",
+        align === "right" ? "items-end" : "items-start",
       )}
     >
       {images.length > 0 ? (
         <ImageGallery images={images} align={align} size={align === "left" ? "large" : "compact"} />
       ) : null}
-      {nonImages.map((item, i) => (
-        <AttachmentTile key={`${item.url ?? item.name ?? item.kind}-${i}`} attachment={item} />
+      {videos.map((item, i) => (
+        <AttachmentTile key={`video-${i}`} attachment={item} pending={pending} className="my-0" />
       ))}
+      {files.length > 0 ? (
+        <div className={cn("flex w-full min-w-0 flex-wrap items-start gap-2", align === "right" && "justify-end")}>
+          {files.map((item, i) => (
+            <AttachmentTile key={`file-${i}`} attachment={item} pending={pending} />
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

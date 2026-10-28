@@ -208,6 +208,7 @@ class TurnDelivery:
     route_admission: TurnRouteAdmission | None = None
     enable_stream: bool = False
     tool_only_output: bool = False
+    continuation_pending: bool = field(init=False, default=False)
     delivery_message: InboundMessage = field(init=False)
     lifecycle_message: InboundMessage = field(init=False)
     _stream_base_id: str | None = field(init=False, default=None)

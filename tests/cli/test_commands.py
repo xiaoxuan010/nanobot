@@ -921,7 +921,7 @@ def test_provider_login_openai_codex_passes_configured_proxy(monkeypatch):
     proxy = "http://127.0.0.1:23458"
     monkeypatch.setattr(
         "nanobot.config.loader.load_config",
-        lambda: Config.model_validate({"providers": {"openaiCodex": {"proxy": proxy}}}),
+        lambda: Config.model_validate({"network": {"proxy": proxy}, "providers": {"openaiCodex": {"useProxy": True}}}),
     )
 
     import oauth_cli_kit
@@ -964,7 +964,7 @@ def test_provider_login_openai_codex_uses_explicit_config_proxy(tmp_path, monkey
         path = config_path or active_path.get("path")
         if path is None:
             return Config.model_validate(
-                {"providers": {"openaiCodex": {"proxy": "http://default-proxy:8080"}}}
+                {"network": {"proxy": "http://default-proxy:8080"}, "providers": {"openaiCodex": {"useProxy": True}}}
             )
         return real_load_config(path)
 
@@ -997,7 +997,7 @@ def test_provider_login_openai_codex_resolves_proxy_env_ref(monkeypatch):
     monkeypatch.setattr(
         "nanobot.config.loader.load_config",
         lambda: Config.model_validate(
-            {"providers": {"openaiCodex": {"proxy": "${CODEX_PROXY_FOR_TEST}"}}}
+            {"network": {"proxy": "${CODEX_PROXY_FOR_TEST}"}, "providers": {"openaiCodex": {"useProxy": True}}}
         ),
     )
 
@@ -1021,7 +1021,7 @@ def test_provider_login_xai_grok_runs_browser_flow_with_configured_proxy(monkeyp
     proxy = "http://127.0.0.1:23458"
     monkeypatch.setattr(
         "nanobot.config.loader.load_config",
-        lambda: Config.model_validate({"providers": {"xaiGrok": {"proxy": proxy}}}),
+        lambda: Config.model_validate({"network": {"proxy": proxy}, "providers": {"xaiGrok": {"useProxy": True}}}),
     )
     monkeypatch.setattr(
         "nanobot.providers.xai_oauth.get_xai_oauth_token",
@@ -1336,7 +1336,8 @@ def test_openai_codex_proxy_config_affects_provider_and_signature():
                         "model": "openai-codex/gpt-5.5",
                     }
                 },
-                "providers": {"openaiCodex": {"proxy": proxy}},
+                "network": {"proxy": proxy},
+                "providers": {"openaiCodex": {"useProxy": True}},
             }
         )
 
@@ -1365,13 +1366,13 @@ def test_provider_proxy_rejects_unsupported_backend():
                 "azureOpenai": {
                     "apiKey": "sk-test",
                     "apiBase": "https://azure.example/openai/v1",
-                    "proxy": "http://127.0.0.1:23458",
+                    "useProxy": True,
                 }
             },
         }
     )
 
-    with pytest.raises(ValueError, match=r"providers\.azure_openai\.proxy"):
+    with pytest.raises(ValueError, match=r"providers\.azure_openai\.use_proxy"):
         make_provider(config)
 
 
@@ -2425,10 +2426,7 @@ def test_webui_dev_starts_vite_sidecar_and_gateway(monkeypatch, tmp_path: Path) 
     def fake_dev_server(**kwargs):
         seen["dev_kwargs"] = kwargs
         seen["dev_running"] = True
-        dev_server = SimpleNamespace(
-            url=kwargs["browser_url"],
-            ensure_running=lambda: None,
-        )
+        dev_server = SimpleNamespace(ensure_running=lambda: None)
         seen["dev_server"] = dev_server
         try:
             yield dev_server
@@ -2473,11 +2471,9 @@ def test_webui_dev_starts_vite_sidecar_and_gateway(monkeypatch, tmp_path: Path) 
     dev_kwargs = seen["dev_kwargs"]
     assert isinstance(dev_kwargs, dict)
     assert dev_kwargs["target_url"] == "http://127.0.0.1:8899"
-    browser_url = dev_kwargs["browser_url"]
-    assert isinstance(browser_url, str)
     saved = json.loads(config_file.read_text(encoding="utf-8"))
     secret = saved["channels"]["websocket"]["tokenIssueSecret"]
-    assert browser_url == f"http://127.0.0.1:5173/#/?bootstrapSecret={secret}"
+    browser_url = f"http://127.0.0.1:5173/#/?bootstrapSecret={secret}"
     assert seen["start_options"].port == 18888
     assert seen["attached_while_dev_running"] is True
     assert seen["attach_kwargs"]["poll_hook"] == seen["dev_server"].ensure_running

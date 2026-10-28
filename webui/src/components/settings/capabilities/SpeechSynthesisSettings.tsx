@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from "react";
 import { useTranslation } from "react-i18next";
 
+import { useEditCompletion, type EditCompletion } from "@/components/settings/shared/useEditCompletion";
 import { RestartSettingsFooter, SettingsGroup, SettingsRow } from "@/components/settings/shared/SettingsControls";
 import { Input } from "@/components/ui/input";
 import type { SettingsPayload, SpeechSynthesisSettingsUpdate } from "@/lib/types";
@@ -35,8 +36,9 @@ export function speechSynthesisDraftState(settings: SettingsPayload, form: Speec
 }
 
 export function SpeechSynthesisSettings({
-  settings, form, dirty, saving, error, onChangeForm, onSave,
+  settings, form, dirty, saving, error, onChangeForm, onSave, editCompletion,
 }: {
+  editCompletion?: EditCompletion;
   settings: SettingsPayload;
   form: SpeechSynthesisSettingsUpdate;
   dirty: boolean;
@@ -46,6 +48,8 @@ export function SpeechSynthesisSettings({
   onSave: () => void;
 }) {
   const { t } = useTranslation();
+  const localEdits = useEditCompletion(form, dirty, onSave, !editCompletion);
+  const edits = editCompletion ?? localEdits;
   const fields = [
     { name: "apiBase", label: t("settings.byok.apiBase"), placeholder: "https://…/api/v1" },
     { name: "apiKey", label: t("settings.byok.apiKey"), placeholder: t(settings.speech_synthesis?.api_key_configured
@@ -54,7 +58,7 @@ export function SpeechSynthesisSettings({
     { name: "voice", label: t("settings.speechSynthesis.voice") },
   ] as const;
   return (
-    <section>
+    <section onChangeCapture={edits.onChangeCapture} onFocusCapture={edits.onFocusCapture} onBlurCapture={edits.onBlurCapture}>
       <p className="settings-list-inset pb-4 text-[13px] text-muted-foreground">{t("settings.speechSynthesis.help")}</p>
       <SettingsGroup>
         {fields.map(({ name, label, ...field }) => (

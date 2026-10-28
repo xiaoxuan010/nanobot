@@ -38,6 +38,7 @@ _PORT = 29900
 @pytest.fixture(autouse=True)
 def _isolate_runtime_data(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("nanobot.config.paths.get_data_dir", lambda: tmp_path)
+    monkeypatch.setattr("nanobot.config.loader._current_config_path", tmp_path / "config.json")
 
 
 class _MatrixChannel(BaseChannel):
@@ -1230,11 +1231,11 @@ async def test_pairing_routes_require_token_and_approve_or_deny(
     monkeypatch.setattr("nanobot.webui.settings_routes.list_pending", lambda: list(pending))
     monkeypatch.setattr(
         "nanobot.webui.settings_routes.approve_code",
-        lambda code: approved.append(code) or ("feishu", "ou_123") if code == "ABCD-EFGH" else None,
+        lambda code, **_kwargs: approved.append(code) or ("feishu", "ou_123") if code == "ABCD-EFGH" else None,
     )
     monkeypatch.setattr(
         "nanobot.webui.settings_routes.deny_code",
-        lambda code: denied.append(code) or code == "ABCD-EFGH",
+        lambda code, **_kwargs: denied.append(code) or code == "ABCD-EFGH",
     )
 
     channel = _ch(bus, session_manager=_seed_session(tmp_path), port=_free_port())
@@ -1289,6 +1290,28 @@ async def test_pairing_routes_require_token_and_approve_or_deny(
     )
     assert missing_code.status_code == 400
     assert "Missing pairing code" in missing_code.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["approve", "deny"])
+async def test_pairing_mutation_publishes_committed_snapshot(action, tmp_path, monkeypatch):
+    from nanobot.bus.queue import MessageBus
+    from nanobot.pairing import store
+    from nanobot.pairing.events import PairingChanged
+
+    monkeypatch.setattr(store, "_store_path", lambda: tmp_path / "pairing.json")
+    code = store.generate_code("telegram", "alice")
+    bus = MessageBus()
+    snapshots = []
+    bus.subscribe(lambda _event: snapshots.append(store.list_pending()), PairingChanged)
+    channel = _ch(bus, session_manager=_seed_session(tmp_path), port=_free_port())
+    result = await _webui_mutate(channel, f"settings.pairing.{action}", {"code": code})
+    await bus.drain()
+    assert result.status_code == 200 and snapshots == [[]]
+    assert store.is_approved("telegram", "alice") == (action == "approve")
+    missing = await _webui_mutate(channel, f"settings.pairing.{action}", {"code": code})
+    await bus.drain()
+    assert missing.status_code == 404 and snapshots == [[]]
 
 
 @pytest.mark.asyncio
@@ -1408,12 +1431,33 @@ async def test_nanobot_feature_channel_action_can_apply_without_restart(
 
 
 @pytest.mark.asyncio
-async def test_nanobot_feature_install_only_does_not_start_channel(
+@pytest.mark.parametrize("installed_now", [True, False])
+async def test_nanobot_feature_install_only_tracks_pending_restart_without_starting_channel(
     bus: MagicMock,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    installed_now: bool,
 ) -> None:
     runtime_calls: list[tuple[str, str, str | None]] = []
+
+    def features_payload(**_kwargs: Any) -> dict[str, Any]:
+        return {
+            "features": [{
+                "name": name,
+                "type": "channel",
+                "enabled": False,
+                "installed": True,
+                "ready": False,
+                "status": "not_enabled",
+                "requires_restart": True,
+            } for name in ("whatsapp", "email")],
+            "enabled_count": 0,
+        }
+
+    monkeypatch.setattr(
+        "nanobot.webui.settings_routes.nanobot_features_payload",
+        features_payload,
+    )
 
     def feature_action(
         action: str,
@@ -1425,18 +1469,7 @@ async def test_nanobot_feature_install_only_does_not_start_channel(
         assert action == "enable"
         assert query == {"name": ["whatsapp"], "install_only": ["true"]}
         assert allow_install is True
-        return {
-            "features": [{
-                "name": "whatsapp",
-                "type": "channel",
-                "enabled": False,
-                "installed": True,
-                "ready": False,
-                "status": "not_enabled",
-            }],
-            "enabled_count": 0,
-            "requires_restart": False,
-        }
+        return {**features_payload(), "requires_restart": installed_now}
 
     async def channel_feature_action(
         action: str,
@@ -1465,7 +1498,28 @@ async def test_nanobot_feature_install_only_does_not_start_channel(
 
     assert response.status_code == 200
     assert runtime_calls == []
-    assert response.json()["features"][0]["enabled"] is False
+    features = response.json()["features"]
+    assert features[0]["enabled"] is False
+    assert [feature["restart_pending"] for feature in features] == [installed_now, False]
+
+    # Refreshing the catalog keeps the pending installation tied to its channel.
+    refreshed = await _http_get(
+        f"http://127.0.0.1:{channel.config.port}/api/settings/nanobot-features",
+        headers={"Authorization": f"Bearer {channel.gateway.tokens.issue_api_token(300)}"},
+    )
+    assert refreshed.status_code == 200
+    assert [feature["restart_pending"] for feature in refreshed.json()["features"]] == [
+        installed_now, False,
+    ]
+
+    # A new gateway owns a fresh runtime; installed support is ready to configure.
+    restarted = _ch(bus, session_manager=SessionManager(tmp_path), port=_free_port())
+    after_restart = await _http_get(
+        f"http://127.0.0.1:{restarted.config.port}/api/settings/nanobot-features",
+        headers={"Authorization": f"Bearer {restarted.gateway.tokens.issue_api_token(300)}"},
+    )
+    assert after_restart.status_code == 200
+    assert all(not feature["restart_pending"] for feature in after_restart.json()["features"])
 
 
 @pytest.mark.asyncio
@@ -2358,6 +2412,7 @@ async def test_sessions_list_only_returns_websocket_sessions_by_default(
             project.resolve()
         )
         assert rows["websocket:beta"]["workspace_scope"]["access_mode"] == "restricted"
+        assert all(row["project_locked"] is True for row in sessions)
         assert all(not any(key.startswith("_") for key in row) for row in sessions)
     finally:
         await channel.stop()

@@ -355,32 +355,7 @@
   "previewTabs": {
     "title": "Preview",
     "closeTab": "Close {{name}}",
-    "closeAll": "Close preview pane",
-    "websiteInfo": "About website previews"
-  },
-  "webPreview": {
-    "viewLinks": "View links",
-    "back": "Back",
-    "original": "Original link",
-    "actions": "Link actions",
-    "open": "Preview website",
-    "external": "Open in browser",
-    "copy": "Copy link",
-    "copied": "Link copied",
-    "copyFailed": "Could not copy link",
-    "title": "Website preview",
-    "resize": "Resize website preview",
-    "refresh": "Refresh website",
-    "close": "Close preview",
-    "isolated": "Restricted, isolated preview. Sign-in and interactive features may not work.",
-    "blockedHint": "Some sites block embedding. If this view stays blank or fails, open it in your browser.",
-    "loopback": "Localhost points to this browser’s device, not a remote gateway. No ports are forwarded.",
-    "native": "Embedded previews are unavailable in the native host. Open this link in your browser.",
-    "unsupported": "This browser does not support credential-isolated previews. Open this link in a new tab.",
-    "sameOrigin": "The nanobot application itself cannot be embedded here. Open it in a new tab.",
-    "mixedContent": "An HTTPS page cannot preview an HTTP website here. Open it in a new tab.",
-    "invalid": "This address cannot be previewed.",
-    "frame": "Website preview: {{host}}"
+    "closeAll": "Close preview pane"
   },
   "starPrompt": {
     "footerAction": "Star nanobot on GitHub",
@@ -397,7 +372,8 @@
     "brand": "nanobot",
     "loading": {
       "connecting": "Connecting to nanobot…",
-      "boot": "Loading nanobot…"
+      "boot": "Loading nanobot…",
+      "failed": "Couldn't load this view. Go back, or reload the page to try again."
     },
     "error": {
       "title": "Couldn't reach nanobot",
@@ -468,7 +444,7 @@
     "collapse": "Collapse sidebar",
     "newChat": "New topic",
     "searchAria": "Search",
-    "searchPlaceholder": "Search",
+    "searchPlaceholder": "Search loaded content",
     "searchResults": "Results",
     "noSearchResults": "No matching topics.",
     "recent": "Recent topics",
@@ -490,6 +466,16 @@
       "title": "Restart before leaving?",
       "description": "Your changes are saved. Restart to apply them.",
       "later": "Restart later"
+    },
+    "network": {
+      "useProxy": "Use proxy",
+      "useProxyHelp": "Uses the shared proxy in Advanced.",
+      "configureProxy": "Configure proxy",
+      "sharedProxyScope": "Shared by all features with proxy enabled.",
+      "authentication": "Authentication (optional)",
+      "username": "Username",
+      "password": "Password",
+      "proxyReferenceAuth": "Set authentication in the referenced proxy URL."
     },
     "runtimeConfig": {
       "apiSaved": "Saved. Restart the API service to apply changes.",
@@ -609,9 +595,13 @@
           "label": "Blocked commands",
           "help": "Block commands that match these rules.\n\nOne regular expression per line, checked alongside built-in deny rules. Commands that fully match allow rules skip these checks."
         },
-        "tools_web_proxy": {
-          "label": "Web proxy",
-          "help": "Used for the agent's web search and page reading. Leave blank to use the default network settings, including proxy environment variables.\n\n127.0.0.1 refers to the machine that runs nanobot. This setting does not change model, MCP, or browser connections."
+        "network_proxy": {
+          "label": "Shared proxy",
+          "help": "Address used by features with Use proxy enabled. 127.0.0.1 is the machine running nanobot."
+        },
+        "tools_web_use_proxy": {
+          "label": "Use proxy",
+          "help": "Use the shared proxy for web search and page reading."
         },
         "tools_web_user_agent": {
           "label": "User agent",
@@ -699,9 +689,13 @@
           "title": "Shell and sandbox",
           "help": "Set command timeouts, environment, and access rules."
         },
+        "proxy": {
+          "title": "Shared proxy",
+          "help": "Set one address for features that use a proxy."
+        },
         "network": {
           "title": "Web connections",
-          "help": "Set the proxy and User-Agent.\n\nSet the proxy and User-Agent header for web requests."
+          "help": "Set the proxy preference and User-Agent for web requests."
         },
         "safety": {
           "title": "Global permissions",
@@ -745,6 +739,13 @@
       "search": "Find an advanced setting",
       "noResults": "No matching settings.",
       "pending": "Unsaved changes",
+      "idleCompaction": {
+        "label": "Auto-compact idle sessions",
+        "help": "Automatically compact context after the idle timeout to reduce token usage on subsequent requests.",
+        "wait": "Idle timeout",
+        "minutes": "minutes",
+        "numberError": "Enter a non-negative whole number of minutes."
+      },
       "numberError": "Enter a valid number within the allowed range.",
       "activeModel": "Use active model",
       "none": "None",
@@ -813,19 +814,12 @@
       "catalogStale": "Cached list may be out of date.",
       "catalogFallback": "Built-in list may be out of date.",
       "selectModel": "Select model",
-      "addConfiguration": "Add configuration",
-      "newConfiguration": "New model configuration",
-      "newConfigurationHelp": "Save a provider, model, and generation settings as a reusable preset.",
-      "configurationName": "Configuration name",
-      "configurationNameHelp": "Rename this saved model configuration.",
-      "configurationNamePlaceholder": "Fast writing",
       "callOrder": "Model order",
       "primary": "Primary",
       "addToOrder": "Enable preset",
       "newPreset": "New preset",
       "newPresetHelp": "Save a model and settings for reuse.",
       "presets": "Model presets",
-      "editPreset": "Edit preset",
       "presetName": "Preset name",
       "presetNameHelp": "Names must be unique; also used by /model.",
       "presetNameDuplicate": "A preset with this name already exists.",
@@ -850,25 +844,18 @@
       "converting": "Converting...",
       "convertAction": "Convert to presets",
       "dragToReorder": "Drag to reorder",
-      "moveUp": "Move up",
-      "moveDown": "Move down",
       "removeFromOrder": "Disable preset",
-      "inCallOrder": "In call order",
       "disabled": "Disabled",
       "noPresets": "No model presets yet",
-      "noPresetsHelp": "Create a preset, then add it to the call order.",
       "removeBeforeDelete": "Cannot delete the primary model",
       "providerSetupRequired": "Provider setup required",
-      "configureProviderBeforeSaving": "Configure this provider before saving the preset.",
       "deletePresetTitle": "Delete model preset?",
       "deletePresetHelp": "Delete “{{name}}” and remove it from the fallback list. Provider credentials will be kept.",
       "searchModels": "Choose model",
       "useCustomModel": "Use",
       "loadingModels": "Loading models...",
       "searchCatalog": "Search this provider’s model catalog.",
-      "modelsAvailable": "available",
       "noModelResults": "No matching models.",
-      "loadFailed": "Model list unavailable.",
       "unsupportedModelList": "Type a model ID manually.",
       "providerNotConfigured": "Configure this provider before loading models.",
       "autoProviderCustomOnly": "Enter a model ID manually when using automatic provider selection.",
@@ -903,6 +890,27 @@
       "completed": "Task completed. Click to view the result.",
       "failed": "Task failed. Click for details.",
       "interrupted": "Task needs attention. Click to continue."
+    },
+    "appearance": {
+      "system": "System",
+      "reading": "Reading",
+      "readingHelp": "Adjust messages, code and the composer—not navigation.",
+      "custom": "Custom",
+      "customSize": "Custom text size",
+      "customRange": "Enter a whole number from {{min}} to {{max}} px.\nCode scales with the text; the composer stays at least 16px.",
+      "customInvalid": "Use a whole number from {{min}} to {{max}} px.\nYour text remains at {{size}} px.",
+      "small": "Small",
+      "standard": "Standard",
+      "large": "Large",
+      "previewText": "**A little room to think.**\n\nClear words, comfortable reading. Make this space your own.",
+      "previewPlaceholder": "Where should we begin?",
+      "process": "Activity display",
+      "processHelp": "Choose how much detail appears as nanobot works.",
+      "autoHelp": "Show progress while working; keep finished work compact.",
+      "expandedHelp": "Keep activity details expanded by default.",
+      "summaryHelp": "Show changed files and line counts.",
+      "diffHelp": "Show code changes directly in the conversation.",
+      "collapsedHelp": "Keep code changes folded until you open them."
     },
     "readingTextSize": {
       "small": "Small reading text",
@@ -1009,39 +1017,17 @@
       "empty": "No matching timezones."
     },
     "cliApps": {
-      "allCategories": "All categories",
-      "availableCount": "{{count}} apps",
-      "installedCount": "{{count}} CLIs installed",
-      "summary": "{{installed}} of {{total}} CLIs installed",
-      "filterAll": "All",
-      "filterInstalled": "Installed CLIs",
-      "filterNotInstalled": "Not installed",
-      "searchPlaceholder": "Search CLIs",
-      "loading": "Loading CLI apps…",
-      "empty": "No CLI apps match this filter.",
       "statusInstalled": "App ready",
-      "statusMissing": "Missing",
-      "statusAvailable": "Available",
-      "statusUnsupported": "Unsupported",
-      "statusNotInstalled": "App not installed",
-      "requires": "Requires",
       "test": "Test app",
       "update": "Update app",
       "uninstall": "Uninstall app",
       "install": "Install app",
-      "readyTitle": "@{{name}} is ready",
       "readyStatus": "Ready",
       "readyTry": "Try @{{name}}",
       "readyCopied": "Copied",
       "readyPrompt": "Ask nanobot to use @{{name}} for this task.",
       "openChat": "Open chat",
-      "unsupported": "Unsupported",
-      "unavailable": "Unavailable",
-      "noDescription": "No description available.",
-      "availableCount_one": "{{count}} app",
-      "availableCount_other": "{{count}} apps",
-      "installedCount_one": "{{count}} CLI installed",
-      "installedCount_other": "{{count}} CLIs installed"
+      "unavailable": "Unavailable"
     },
     "about": {
       "updateNotice": "Update available",
@@ -1298,20 +1284,12 @@
       "workspace": "Working directory"
     },
     "usage": {
-      "title": "Token usage",
       "shortTitle": "Token usage",
-      "last30Days": "Last 30 days",
       "viewDetails": "View details",
-      "previousPage": "Previous page",
-      "nextPage": "Next page",
-      "dailyAverage": "Daily average",
-      "inputTokens": "Input tokens",
       "cacheHitRate": "Cache hit rate",
-      "requestTrend": "Daily requests",
       "cacheRateHelp": "Cache hit rate excludes input with unknown cache status.",
       "dailyTrend": "Daily tokens",
       "bySource": "Usage by source",
-      "byModel": "Usage by model",
       "modelTrend": "Model trends",
       "modelsUnavailable": "No model breakdown available.",
       "otherModels": "Other / unattributed",
@@ -1323,19 +1301,8 @@
       "cacheUnknown": "Unknown status",
       "outputTokens": "Output",
       "otherTokens": "Other tokens",
-      "subtitle": "Provider-reported usage over the last 12 months.",
-      "empty": "Token activity will appear after new model replies.",
       "totalTokens": "Total tokens",
-      "peakTokens": "Peak tokens",
-      "thirtyDayTokens": "30-day tokens",
-      "currentStreak": "Current streak",
-      "longestStreak": "Longest streak",
-      "daysValue": "{{count}}d",
-      "last30": "30 days",
-      "activeDays": "Active days",
       "requests": "Requests",
-      "estimated": "estimated",
-      "includesEstimates": "includes estimates",
       "cellTitle": "{{date}}: {{tokens}} tokens, {{requests}} requests",
       "sources": {
         "user": "Chat",
@@ -1378,7 +1345,6 @@
       "defaultAPIDescription": "Presets set to Auto use this API. A preset can choose another API from the supported list.",
       "declareAPIs": "Set supported APIs",
       "openaiDefaultAPIDescription": "Sets the default API for presets using Auto. Auto here follows known model rules. Individual presets can override this choice.",
-      "proxy": "Network proxy",
       "thinkingStyle": "Reasoning format",
       "sendHistoryReasoning": "Replay past reasoning",
       "sendHistoryReasoningHelp": "Include reasoning from completed turns. Turning this off preserves reasoning needed by tool calls in the current turn.",
@@ -1476,6 +1442,7 @@
       "loading": "Loading channels…",
       "empty": "No channels match this filter.",
       "restartRequired": "Restart nanobot to apply updated channel support.",
+      "restartBeforeInstall": "Restart nanobot before installing another channel.",
       "requires": "Requires: {{requirements}}",
       "setUp": "Set up",
       "setupGuide": "Setup guide",
@@ -1789,19 +1756,16 @@
       "signInBeforeSaving": "Sign in before saving this provider in the preset.",
       "signedIn": "Signed in",
       "notSignedIn": "Not signed in",
-      "proxyLabel": "Network proxy",
-      "proxySaveBeforeSignIn": "Save proxy changes before signing in.",
-      "saveProxy": "Save proxy",
       "localCodeHelp": "Complete sign-in in your browser. If nanobot does not connect automatically, paste the authorization code below.",
       "remoteCodeHelp": "Select Sign in to open xAI on your computer. After signing in, paste the authorization code shown by xAI below.",
-      "localCallbackHelp": "Complete sign-in in your browser. If nanobot does not connect automatically, copy the full localhost callback URL from the address bar and paste it below.",
-      "remoteCallbackHelp": "Open ChatGPT in this browser and finish signing in. When the localhost page fails to load, copy the full URL from the address bar and paste it below.",
+      "localCallbackHelp": "Finish signing in using your browser. If nanobot does not connect automatically, copy the full URL from the localhost page’s address bar—even if the page cannot load—paste it below, then select “Finish sign-in”.",
+      "remoteCallbackHelp": "Open ChatGPT in this browser and finish signing in. On the localhost page, copy the full URL from the address bar—even if the page cannot load—paste it below, then select “Finish sign-in”.",
       "authorizationCode": "Authorization code",
       "callbackUrl": "Callback URL",
-      "callbackUrlPlaceholder": "http://localhost:1455/auth/callback?code=…&state=…",
+      "callbackUrlPlaceholder": "Paste the full callback URL here",
       "openChatGPT": "Open ChatGPT",
       "pasteCallbackToContinue": "Paste the callback URL to continue.",
-      "waitingForCallback": "Waiting for the browser callback…",
+      "waitingForCallback": "Waiting for sign-in to finish…",
       "finishSignIn": "Finish sign-in"
     },
     "skills": {
@@ -1927,9 +1891,7 @@
     "showArchived": "Show archived",
     "hideArchived": "Hide archived",
     "select": "Select",
-    "cancelSelection": "Cancel selection",
     "selectedCount": "{{count}} selected",
-    "deleteSelected": "Delete",
     "delete": "Delete",
     "newChat": "New topic",
     "groups": {
@@ -1941,6 +1903,14 @@
       "earlier": "Earlier",
       "archived": "Archived"
     }
+  },
+  "archiveConfirm": {
+    "title": "Archive this topic?",
+    "titleMany": "Archive {{count}} topics?",
+    "unarchiveTitle": "Unarchive this topic?",
+    "unarchiveTitleMany": "Unarchive {{count}} topics?",
+    "description": "Conversations are kept. You can unarchive them at any time.",
+    "unarchiveDescription": "These topics will return to the sidebar."
   },
   "deleteConfirm": {
     "title": "Delete this topic?",
@@ -1980,7 +1950,6 @@
     "subagents": {
       "stopFailed": "Could not stop this task.",
       "stopTask": "Stop {{label}}",
-      "receiptHelp": "Delivered means the message was included in the subtask’s next model request. It does not mean the instructions have been carried out.",
       "states": {
         "queued": "Queued",
         "running": "Running",
@@ -1991,11 +1960,6 @@
         "cancelled": "Cancelled",
         "interrupted": "Interrupted"
       },
-      "receipts": {
-        "accepted": "Queued: {{count}}",
-        "delivered": "Delivered: {{count}}",
-        "undelivered": "Undelivered: {{count}}"
-      },
       "interruptedHelp": "The host restarted before this task finished. It has not been restarted automatically.",
       "workTitle": "Subtasks",
       "otherWorkTitle": "Other tasks",
@@ -2003,10 +1967,36 @@
       "progress": "{{completed}} of {{total}} completed",
       "running": "Running: {{count}}",
       "finished": "Finished: {{count}}",
-      "needsReview": "Review needed: {{count}}",
-      "messages": "Message status"
+      "completed": "Completed: {{count}}",
+      "needsReview": "Review needed: {{count}}"
     },
     "compaction": {
+      "reasons": {
+        "idle": {
+          "started": "Automatically compacting context after inactivity",
+          "succeeded": "Context automatically compacted after inactivity",
+          "failed": "Automatic context compaction failed after inactivity",
+          "cancelled": "Automatic compaction after inactivity did not finish"
+        },
+        "context_pressure": {
+          "started": "Compacting a long context",
+          "succeeded": "Long context compacted",
+          "failed": "Failed to compact a long context",
+          "cancelled": "Compaction of a long context cancelled"
+        },
+        "manual": {
+          "started": "Manual compaction in progress",
+          "succeeded": "Manual compaction complete",
+          "failed": "Manual compaction failed",
+          "cancelled": "Manual compaction cancelled"
+        },
+        "provider_native": {
+          "started": "Compacting context on the provider's server",
+          "succeeded": "Context compacted on the provider's server",
+          "failed": "Failed to compact context on the provider's server",
+          "cancelled": "Context compaction cancelled on the provider's server"
+        }
+      },
       "cancelled": "Context compaction cancelled",
       "empty": "Nothing to compact.",
       "started": "Compressing context",
@@ -2111,7 +2101,6 @@
       "placeholderThread": "Type your message…",
       "placeholderHero": "Describe what you’d like to do",
       "placeholderOpening": "Opening a new topic…",
-      "placeholderStreaming": "Model is responding…",
       "inputAria": "Message input",
       "goalStateStrip": "Goal: {{label}}",
       "goalStateFallback": "Goal",
@@ -2124,6 +2113,10 @@
       "removeQuotedContext": "Remove quote",
       "modelNotConfigured": "Model not configured",
       "configureModel": "Configure model",
+      "shell": {
+        "run": "Run Shell command",
+        "removeContext": "Remove attachments and quoted text before running a command."
+      },
       "chooseAI": "Choose model",
       "switchModel": "Switch model",
       "manageModels": "Manage presets",
@@ -2292,10 +2285,11 @@
         "unsupported_type": "Unsupported file type",
         "empty_file": "Empty files cannot be attached",
         "too_many_attachments": "Max {{max}} attachments per message",
+        "too_many_videos": "Max 1 video per message",
         "too_many_images": "Max {{max}} images per message",
         "magic_mismatch": "File doesn't look like a real image",
         "decode_failed": "Couldn't decode this image",
-        "too_large": "File is too large — try a smaller one",
+        "too_large": "File is too large to upload ({{size}}; maximum {{max}})",
         "total_too_large": "Attachments are too large together — remove some or use smaller files",
         "io": "Couldn't read this file"
       },
@@ -2331,7 +2325,7 @@
     "actions": "Message actions",
     "streaming": "streaming",
     "delivery": {
-      "sending": "Sending…",
+      "sending": "Sending",
       "failed": "Not sent"
     },
     "assistantTyping": "Assistant is typing",
@@ -2509,8 +2503,9 @@
     "retryRateLimit": "Rate limited",
     "retryServer": "Model unavailable",
     "retryUnknown": "Model request failed",
-    "retryWaiting": "{{error}}. Retrying in {{seconds}}s (attempt {{attempt}}).",
-    "retryExhausted": "{{error}}. Ending turn.",
+    "retryWaiting": "{{error}} Retrying in {{seconds}}s",
+    "retrying": "{{error}} Retrying",
+    "retryExhausted": "{{error}} Ending turn",
     "cliActivityRunningOne": "Using {{name}}",
     "cliActivityRanOne": "Used {{name}}",
     "cliActivityFailedOne": "Could not use {{name}}",
@@ -2523,6 +2518,7 @@
     "imageAttachment": "Image attachment",
     "videoAttachment": "Video attachment",
     "fileAttachment": "File attachment",
+    "downloadAttachment": "Download {{name}}",
     "attachmentUnavailable": "Attachment unavailable",
     "dataTable": "Data table",
     "fileEditPreparing": "Preparing file edit…",
@@ -2539,7 +2535,6 @@
     "turnLatencyTitle": "Response time (end-to-end)",
     "fileEditViewDiff": "View changes",
     "fileEditViewLargeDiff": "Expand changes",
-    "fileEditDiffLineCount": "{{count}} lines",
     "fileEditUnchangedLinesHidden": "{{count}} unchanged lines hidden",
     "fileEditShowMoreLines": "Show {{count}} more lines",
     "fileEditShowFewerLines": "Show fewer lines",
@@ -2559,6 +2554,7 @@
     "failedHelp": "The saved task could not be restored safely. Review it before continuing.",
     "resuming": "Restoring interrupted task…",
     "review": "Review the task before continuing. Tools will not be replayed automatically.",
+    "replyPreserved": "Reply saved. You can continue.",
     "safeResume": "Continuing from saved conversation context.",
     "dismiss": "Dismiss",
     "continue": "Continue"
@@ -2683,7 +2679,7 @@
       "authenticationBody": "Sign in again or check the provider’s API key in model settings.",
       "billingTitle": "Model provider quota is unavailable",
       "billingBody": "Add credit or check billing for the provider account, then try again.",
-      "connectionTitle": "Could not connect to the model provider",
+      "connectionTitle": "Model connection failed",
       "timeoutTitle": "Model provider request timed out",
       "rateLimitTitle": "Model provider rate limit reached",
       "serverTitle": "Model provider service error",

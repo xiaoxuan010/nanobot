@@ -77,7 +77,7 @@ def bus():
 @pytest.fixture
 def manager(config, bus, tmp_path):
     manager = ChannelManager(config, bus, config_path=tmp_path / "config.json")
-    manager.channels["mock"] = manager._build_channel("mock", MockChannel, {})
+    manager.channels["mock"] = manager._build_channel(MockChannel, {})
     return manager
 
 
@@ -288,7 +288,6 @@ class TestProgressFiltering:
 
     def test_progress_visibility_uses_channel_overrides(self, manager, bus):
         manager.channels["mock"] = manager._build_channel(
-            "mock",
             MockChannel,
             {"sendProgress": False, "sendToolHints": False},
         )
@@ -306,7 +305,6 @@ class TestProgressFiltering:
         manager = ChannelManager(config, bus, config_path=tmp_path / "config.json")
 
         channel = manager._build_channel(
-            "mattermost",
             MattermostChannel,
             {"enabled": True},
         )
@@ -315,7 +313,6 @@ class TestProgressFiltering:
         assert channel.send_tool_hints is False
 
         opted_in = manager._build_channel(
-            "mattermost",
             MattermostChannel,
             {
                 "enabled": True,

@@ -38,6 +38,7 @@ from nanobot.agent.tools.file_state import FileStateStore, bind_file_states, res
 from nanobot.agent.tools.message import capture_message_deliveries
 from nanobot.agent.tools.registry import ToolRegistry
 from nanobot.agent.tools.runtime_control import AgentRuntimeControl
+from nanobot.agent.tools.shell import ExecTool
 from nanobot.agent.turn_delivery import (
     TurnDelivery,
     TurnDeliveryFactory,
@@ -46,6 +47,7 @@ from nanobot.agent.turn_delivery import TurnRoute as TurnRoute
 from nanobot.agent.turn_hooks import AgentTurnHookSpec, build_agent_turn_hook
 from nanobot.agent.turn_policy import TurnPolicy, TurnPolicyProvider
 from nanobot.bus.events import (
+    INBOUND_META_LOCAL_MEDIA,
     INBOUND_META_RUNTIME_CONTROL,
     INBOUND_META_TURN_ID,
     INBOUND_META_USER_SHELL,
@@ -61,6 +63,7 @@ from nanobot.bus.outbound_events import (
 from nanobot.bus.queue import MessageBus, TimestampedQueue
 from nanobot.command import CommandContext, CommandRouter, register_builtin_commands
 from nanobot.command.router import command_text
+from nanobot.config.network import NetworkConfig
 from nanobot.config.schema import AgentDefaults, ModelPresetConfig
 from nanobot.events import NO_EVENTS, AgentEvent, EventSink
 from nanobot.llm_usage.context import source_from_request
@@ -303,6 +306,7 @@ class AgentLoop:
         unified_session: bool = False,
         disabled_skills: list[str] | None = None,
         tools_config: ToolsConfig | None = None,
+        network_config: NetworkConfig | None = None,
         provider_snapshot_loader: Callable[..., ProviderSnapshot] | None = None,
         provider_signature: tuple[object, ...] | None = None,
         model_presets: dict[str, ModelPresetConfig] | None = None,
@@ -370,6 +374,7 @@ class AgentLoop:
             else defaults.tool_hint_max_length
         )
         self.tools_config = _tc
+        self.network_config = network_config or NetworkConfig()
         self.web_config = _tc.web
         self.exec_config = _tc.exec
         self.cron_service = cron_service
@@ -410,6 +415,7 @@ class AgentLoop:
             workspace=workspace,
             bus=bus,
             tools_config=_tc,
+            network_config=self.network_config,
             max_tool_result_chars=self.max_tool_result_chars,
             restrict_to_workspace=restrict_to_workspace,
             disabled_skills=disabled_skills,
@@ -525,6 +531,7 @@ class AgentLoop:
             session_ttl_minutes=defaults.session_ttl_minutes,
             idle_compact_check_interval_seconds=defaults.idle_compact_check_interval_seconds,
             tools_config=config.tools,
+            network_config=config.network,
             model_presets=preset_helpers.configured_model_presets(config),
             model_preset=defaults.model_preset,
             dream_model_preset=defaults.dream.model_override,
@@ -669,8 +676,12 @@ class AgentLoop:
 
         runtime_control = AgentRuntimeControl(self)
         self.register_runtime_context_provider(runtime_control.workspace_context)
+        self.register_runtime_context_provider(
+            partial(turn_continuation.iteration_limit_context, self.sessions.state),
+        )
         ctx = ToolContext(
             config=self.tools_config,
+            network=self.network_config,
             workspace=str(self.workspace),
             bus=self.bus,
             subagent_manager=self.subagents,
@@ -723,6 +734,9 @@ class AgentLoop:
         turn_id = msg.metadata.get(INBOUND_META_TURN_ID)
         if isinstance(turn_id, str) and turn_id:
             extra[INBOUND_META_TURN_ID] = turn_id
+        local_media = msg.metadata.get(INBOUND_META_LOCAL_MEDIA)
+        if isinstance(local_media, list) and local_media:
+            extra[INBOUND_META_LOCAL_MEDIA] = [path for path in cast(list[object], local_media) if isinstance(path, str)]
         return extra
 
     async def _persist_user_message_early(
@@ -890,7 +904,7 @@ class AgentLoop:
         """Execute one trusted user command with the active workspace policy."""
         metadata = dict(ctx.msg.metadata or {})
         tool = self.tools.get("exec")
-        if tool is None:
+        if not isinstance(tool, ExecTool):
             content = "Shell execution is disabled in this nanobot configuration."
         else:
             session = ctx.session or await self.sessions.state.get(ctx.key)
@@ -918,7 +932,7 @@ class AgentLoop:
             try:
                 for turn_scope in ctx.turn_scopes:
                     turn_scope_stack.enter_context(turn_scope)
-                result = await tool.execute(
+                result = await tool.execute_to_completion(
                     command=ctx.args.strip(),
                     working_dir=str(scope.project_path),
                 )
@@ -1722,7 +1736,7 @@ class AgentLoop:
                         pending_queue=pending,
                         delivery=delivery,
                     )
-                    continuing = turn_continuation.internal_continuation_pending(msg.metadata)
+                    continuing = delivery.continuation_pending
                     await delivery.complete(
                         response,
                         publish_completion=not continuing,
@@ -1732,6 +1746,8 @@ class AgentLoop:
                         coordinator.complete(msg, response=response)
                 except asyncio.CancelledError:
                     logger.info("Task cancelled for session {}", session_key)
+                    # The queued continuation is cancelled with this session worker.
+                    delivery.continuation_pending = False
                     try:
                         await delivery.abort_stream()
                     except Exception:
@@ -1751,16 +1767,12 @@ class AgentLoop:
                     try:
                         key = self._effective_session_key(msg)
                         session = await self.sessions.state.get(key)
-                        if restore_runtime_checkpoint(session):
-                            self._clear_pending_user_turn(session)
-                            await self.sessions.state.restore_interruption(session)
-                            logger.info(
-                                "Restored partial context for cancelled session {}",
-                                key,
-                            )
+                        restore_runtime_checkpoint(session)
+                        await self.sessions.state.finish_turn(session)
+                        logger.info("Saved cancelled turn for session {}", key)
                     except Exception:
                         logger.opt(exception=log_content).debug(
-                            "Could not restore checkpoint for cancelled session {}",
+                            "Could not finalize cancelled turn for session {}",
                             session_key,
                         )
                     raise
@@ -1768,15 +1780,11 @@ class AgentLoop:
                     logger.opt(exception=log_content).error(
                         "Error processing message for session {}", session_key,
                     )
-                    await delivery.fail(
-                        publish_completion=not turn_continuation.internal_continuation_pending(
-                            msg.metadata
-                        )
-                    )
+                    await delivery.fail(publish_completion=not delivery.continuation_pending)
                     for coordinator in self._automation_turn_coordinators:
                         coordinator.complete(msg, error=exc)
                 finally:
-                    if not turn_continuation.internal_continuation_pending(msg.metadata):
+                    if not delivery.continuation_pending:
                         await delivery.idle()
         except asyncio.CancelledError:
             if not completion_published and self.commands.requires_session_queue(command_text(msg)):
@@ -2394,7 +2402,7 @@ class AgentLoop:
         ctx.delivery.record_usage(result.round_usages)
         if ctx.kind is TurnKind.USER:
             current = await self.sessions.state.read_metadata(ctx.session_key)
-            await turn_continuation.maybe_continue_turn(
+            ctx.delivery.continuation_pending = await turn_continuation.maybe_continue_turn(
                 ctx, session_metadata=current["metadata"] if current else {},
             )
 
@@ -2422,6 +2430,11 @@ class AgentLoop:
         turn_continuation.prepare_save_boundary(ctx)
         if ctx.usage is not None and not ctx.ephemeral:
             session.metadata["_last_usage"] = ctx.usage.to_dict()
+        if ctx.kind is TurnKind.USER and not ctx.ephemeral:
+            turn_continuation.record_iteration_limit(
+                session.metadata, ctx.stop_reason,
+                continuation_pending=ctx.delivery.continuation_pending,
+            )
         self._save_turn(
             session, ctx.all_messages, ctx.save_skip,
             turn_latency_ms=ctx.turn_latency_ms,
