@@ -58,7 +58,7 @@ from nanobot.bus.outbound_events import (
     StreamedResponseEvent,
     StreamEndEvent,
 )
-from nanobot.bus.queue import MessageBus
+from nanobot.bus.queue import MessageBus, TimestampedQueue
 from nanobot.command import CommandContext, CommandRouter, register_builtin_commands
 from nanobot.command.router import command_text
 from nanobot.config.schema import AgentDefaults, ModelPresetConfig
@@ -126,6 +126,7 @@ if TYPE_CHECKING:
         ToolsConfig,
     )
     from nanobot.cron.service import CronService
+    from nanobot.metrics import GatewayMetrics
     from nanobot.triggers.local_store import LocalTriggerStore
 
 _T = TypeVar("_T")
@@ -315,6 +316,7 @@ class AgentLoop:
         local_trigger_store: LocalTriggerStore | None = None,
         idle_compact_check_interval_seconds: int = 0,
         recovery_admission: RecoveryAdmission | None = None,
+        metrics: GatewayMetrics | None = None,
     ):
         from nanobot.config.schema import ToolsConfig
 
@@ -392,7 +394,8 @@ class AgentLoop:
         self.sessions.set_delete_observer(self._file_state_store.discard)
         self.tools = tool_registry if tool_registry is not None else ToolRegistry()
         self._exec_session_manager = ExecSessionManager()
-        self.runner = AgentRunner()
+        self._metrics = metrics
+        self.runner = AgentRunner(metrics=metrics)
         self.consolidator = Consolidator(
             store=self.context.memory,
             sessions=self.sessions,
@@ -413,6 +416,7 @@ class AgentLoop:
             max_iterations=self.max_iterations,
             max_concurrent_subagents=max_concurrent_subagents,
             consolidator=self.consolidator,
+            metrics=metrics,
             session_manager=self.sessions,
         )
         self._unified_session = unified_session
@@ -429,7 +433,7 @@ class AgentLoop:
         # A queue is installed before its single session worker is scheduled.
         # It remains the only admission path until that worker atomically
         # observes the queue empty and removes it.
-        self._pending_queues: dict[str, asyncio.Queue[InboundMessage]] = {}
+        self._pending_queues: dict[str, TimestampedQueue[InboundMessage]] = {}
         self._preserve_inflight_turns_on_shutdown = False
         self._deferred_automation_turns: dict[str, list[InboundMessage]] = {}
         self._cron_turns = CronTurnCoordinator(
@@ -530,6 +534,15 @@ class AgentLoop:
             tool_registry=tool_registry,
             **extra,
         )
+
+    @property
+    def pending_message_count(self) -> int:
+        """Messages currently in session inboxes, excluding active executions."""
+        return sum(queue.qsize() for queue in self._pending_queues.values())
+
+    @property
+    def oldest_pending_message_enqueued_at(self) -> float:
+        return min((queue.oldest_enqueued_at for queue in self._pending_queues.values() if not queue.empty()), default=0.0)
 
     def _sync_subagent_runtime_limits(self) -> None:
         """Keep subagent runtime limits aligned with mutable loop settings."""
@@ -1588,7 +1601,7 @@ class AgentLoop:
             pending.put_nowait(msg)
             return
 
-        new_pending: asyncio.Queue[InboundMessage] = asyncio.Queue()
+        new_pending = TimestampedQueue[InboundMessage](track_age=self._metrics is not None)
         new_pending.put_nowait(msg)
         self._pending_queues[session_key] = new_pending
         task = asyncio.create_task(self._run_session_queue(session_key, new_pending))

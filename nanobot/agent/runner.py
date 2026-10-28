@@ -8,7 +8,7 @@ from collections.abc import Awaitable, Callable, Iterable
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, ParamSpec, TypeVar, cast
+from typing import TYPE_CHECKING, Any, ParamSpec, TypeVar, cast
 
 from loguru import logger
 
@@ -81,6 +81,9 @@ _ARREARAGE_ERROR_MESSAGE = (
 _PERSISTED_MODEL_ERROR_PLACEHOLDER = "[Assistant reply unavailable due to model error.]"
 _MAX_EMPTY_RETRIES = 2
 _MAX_LENGTH_RECOVERIES = 3
+if TYPE_CHECKING:
+    from nanobot.metrics import AgentType, GatewayMetrics, RunOutcome
+
 _PromptArgs = ParamSpec("_PromptArgs")
 _PromptResult = TypeVar("_PromptResult")
 
@@ -154,7 +157,9 @@ class AgentRunResult:
 class AgentRunner:
     """Run a tool-capable LLM loop without product-layer concerns."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, metrics: GatewayMetrics | None = None, agent_type: AgentType = "main") -> None:
+        self._metrics = metrics
+        self._agent_type: AgentType = agent_type
         self.context_governor = ContextGovernor()
 
     async def prepare_prompt(
@@ -309,6 +314,31 @@ class AgentRunner:
         return True
 
     async def run(self, spec: AgentRunSpec) -> AgentRunResult:
+        metrics = self._metrics
+        if metrics is None:
+            return await self._run(spec)
+        source = spec.llm_usage_source or source_from_session_key(spec.session_key)
+        started = time.perf_counter()
+        outcome: RunOutcome = "error"
+        token = metrics.run_started(self._agent_type, source)
+        try:
+            result = await self._run(spec)
+            if result.stop_reason == "max_iterations":
+                outcome = "limit_reached"
+            elif result.stop_reason == "cancelled":
+                outcome = "cancelled"
+            elif result.error is not None or result.stop_reason in {"error", "empty_final_response"}:
+                outcome = "error"
+            else:
+                outcome = "success"
+            return result
+        except asyncio.CancelledError:
+            outcome = "cancelled"
+            raise
+        finally:
+            metrics.run_finished(self._agent_type, source, token, outcome, time.perf_counter() - started)
+
+    async def _run(self, spec: AgentRunSpec) -> AgentRunResult:
         hook = spec.hook or AgentHook()
         has_run_hooks = hook.has_run_hooks()
         messages: list[dict[str, Any]] = []
@@ -573,6 +603,7 @@ class AgentRunner:
                     context=context,
                     model_messages=messages_for_model,
                     compacted_tool_results=request_state.compacted_tool_results,
+                    metrics=self._metrics,
                 )
                 tool_events.extend(new_events)
                 tools_used.extend(

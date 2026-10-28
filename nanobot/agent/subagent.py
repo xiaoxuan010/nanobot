@@ -55,6 +55,7 @@ from nanobot.utils.prompt_templates import render_template
 
 if TYPE_CHECKING:
     from nanobot.agent.memory import Consolidator
+    from nanobot.metrics import GatewayMetrics
 
 
 class _SubagentOrigin(TypedDict):
@@ -221,6 +222,7 @@ class SubagentManager:
         *,
         consolidator: Consolidator,
         session_manager: SessionManager | None = None,
+        metrics: GatewayMetrics | None = None,
     ):
         if cast(object, consolidator) is None:
             raise TypeError("SubagentManager requires a consolidator")
@@ -267,7 +269,7 @@ class SubagentManager:
         )
         self.consolidator = consolidator
         self._run_slots = asyncio.Semaphore(self.max_concurrent_subagents)
-        self.runner = AgentRunner()
+        self.runner = AgentRunner(metrics=metrics, agent_type="subagent")
         self._exec_session_manager = ExecSessionManager()
         self._running_tasks: dict[str, asyncio.Task[str]] = {}
         self._tasks: dict[str, _SubagentTask] = {}

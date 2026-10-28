@@ -376,6 +376,11 @@ class BaseChannel(ABC):
         return False
 
     @property
+    def is_connected(self) -> bool | None:
+        """Transport connection state, or None when this adapter has no such contract."""
+        return None
+
+    @property
     def is_running(self) -> bool:
         """Check if the channel is running."""
         return self._running

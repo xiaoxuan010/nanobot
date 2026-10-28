@@ -21,6 +21,7 @@ from loguru import logger
 from pydantic import Field
 from websockets.asyncio.client import ClientConnection
 from websockets.asyncio.client import connect as ws_connect
+from websockets.protocol import State
 
 from nanobot.agent.tools.registry import ToolRegistry
 from nanobot.agent.turn_policy import TurnPolicy
@@ -120,6 +121,10 @@ class NapcatChannel(BaseChannel):
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
+
+    @property
+    def is_connected(self) -> bool:
+        return self._ws is not None and self._ws.state is State.OPEN
 
     async def start(self) -> None:
         if not self.config.ws_url:

@@ -1,5 +1,7 @@
 """Foreground gateway runtime and lifecycle helpers."""
 
+from __future__ import annotations
+
 import asyncio
 import signal
 from collections.abc import Awaitable, Callable, Coroutine, Iterable
@@ -43,6 +45,7 @@ from nanobot.cli.webui_support import (
 )
 from nanobot.config.paths import get_data_dir, is_default_workspace
 from nanobot.config.schema import Config
+from nanobot.gateway.health import start_health_server
 from nanobot.gateway.runtime import GatewayHealthIdentity, GatewayInstance, GatewayRuntime
 from nanobot.installation_lock import installation_access
 from nanobot.security.network import is_loopback_host
@@ -61,6 +64,8 @@ from nanobot.webui.dev import WebUIDevError, WebUIDevServer
 from nanobot.webui.sidebar_state import read_webui_sidebar_state
 
 if TYPE_CHECKING:
+    from nanobot.llm_usage.models import LLMCallRecord
+    from nanobot.metrics import GatewayMetrics, GatewayMetricsState
     from nanobot.update_profiles import ProfileReceipt
     from nanobot.update_restart import GatewayStartup
 
@@ -306,10 +311,6 @@ def _pick_heartbeat_target_from_sessions(
     return "cli", "direct"
 
 
-_GATEWAY_HEALTH_MAX_CONNECTIONS = 64
-_GATEWAY_HEALTH_READ_TIMEOUT_SECONDS = 2.0
-
-
 def _print_gateway_health_endpoint(host: str, port: int) -> None:
     """Print a usable health URL and make non-loopback binds explicit."""
     console.print(
@@ -540,11 +541,23 @@ def _run_claimed_gateway(
         webui_static_dist=webui_static_dist,
     )
     sync_workspace_templates(config.workspace_path)
-    bus = MessageBus()
+    metrics: GatewayMetrics | None = None
+    if config.gateway.metrics_enabled:
+        from nanobot.metrics import GatewayMetrics
+
+        metrics = GatewayMetrics(version=__version__)
+    bus = MessageBus(metrics=metrics)
     fallback_model_observer = build_webui_fallback_model_observer(bus)
 
+    def _record_provider_call(call: LLMCallRecord) -> None:
+        record_llm_call(call)
+        if metrics is not None:
+            metrics.record_llm_call(call)
+
     def _observe_provider(snapshot: ProviderSnapshot) -> ProviderSnapshot:
-        snapshot.provider.set_llm_call_observer(record_llm_call)
+        if metrics is not None:
+            metrics.register_provider(snapshot.provider.provider_name, snapshot.model)
+        snapshot.provider.set_llm_call_observer(record_llm_call if metrics is None else _record_provider_call)
         if isinstance(snapshot.provider, FallbackProvider):
             snapshot.provider.set_fallback_model_observer(fallback_model_observer)
         return snapshot
@@ -609,6 +622,7 @@ def _run_claimed_gateway(
     # Create agent with cron service
     agent = AgentLoop.from_config(
         config, bus,
+        metrics=metrics,
         provider=provider_snapshot.provider,
         model=provider_snapshot.model,
         context_window_tokens=provider_snapshot.context_window_tokens,
@@ -827,6 +841,7 @@ def _run_claimed_gateway(
     channels = ChannelManager(
         config,
         bus,
+        metrics=metrics,
         session_manager=session_manager,
         cron_service=cron,
         local_trigger_store=trigger_store,
@@ -876,66 +891,45 @@ def _run_claimed_gateway(
     else:
         console.print("[yellow]✗[/yellow] Heartbeat: disabled")
 
+    if metrics is not None:
+        def _metrics_state() -> GatewayMetricsState:
+            from nanobot.metrics import GatewayMetricsState
+
+            return GatewayMetricsState(
+                ready=_gateway_readiness_payload(channels)[0],
+                maintenance=bus.admission.paused,
+                channels={name: state["running"] for name, state in channels.get_status().items()},
+                connections=channels.get_connection_status(),
+                queues={
+                    "bus_inbound": bus.inbound_size,
+                    "session_inbox": agent.pending_message_count,
+                    "bus_outbound": bus.outbound_size,
+                    "outbound_buffer": channels.outbound_buffer_size,
+                },
+                queue_oldest_enqueued_at={
+                    "bus_inbound": bus.inbound_oldest_enqueued_at,
+                    "session_inbox": agent.oldest_pending_message_enqueued_at,
+                    "bus_outbound": bus.outbound_oldest_enqueued_at,
+                    "outbound_buffer": channels.outbound_buffer_oldest_enqueued_at,
+                },
+                outbound_deliveries_pending=channels.outbound_deliveries_pending,
+            )
+
+        metrics.bind_state(_metrics_state)
+
+    def _health_payload() -> tuple[bool, dict[str, object]]:
+        ready, payload = _gateway_readiness_payload(channels)
+        payload["runtime"] = asdict(health_identity)
+        payload["maintenance"] = bus.admission.paused
+        return ready, payload
+
     async def _health_server(host: str, health_port: int) -> None:
-        """Lightweight HTTP health endpoint on the gateway port."""
-        import json as _json
-
-        connection_slots = asyncio.Semaphore(_GATEWAY_HEALTH_MAX_CONNECTIONS)
-
-        async def handle(
-            reader: asyncio.StreamReader,
-            writer: asyncio.StreamWriter,
-        ) -> None:
-            if connection_slots.locked():
-                writer.close()
-                return
-
-            async with connection_slots:
-                try:
-                    data = await asyncio.wait_for(
-                        reader.read(4096),
-                        timeout=_GATEWAY_HEALTH_READ_TIMEOUT_SECONDS,
-                    )
-                    request_line = data.split(b"\r\n", 1)[0].decode(
-                        "utf-8", errors="replace",
-                    )
-                    method, path = "", ""
-                    parts = request_line.split(" ")
-                    if len(parts) >= 2:
-                        method, path = parts[0], parts[1]
-
-                    if method == "GET" and path == "/health":
-                        ready, payload = _gateway_readiness_payload(channels)
-                        payload["runtime"] = asdict(health_identity)
-                        payload["maintenance"] = bus.admission.paused
-                        body = _json.dumps(payload)
-                        status = "200 OK" if ready else "503 Service Unavailable"
-                        content_type = "application/json"
-                    else:
-                        body = "Not Found"
-                        status = "404 Not Found"
-                        content_type = "text/plain"
-
-                    resp = (
-                        f"HTTP/1.0 {status}\r\n"
-                        f"Content-Type: {content_type}\r\n"
-                        f"Content-Length: {len(body)}\r\n"
-                        "Connection: close\r\n"
-                        f"\r\n{body}"
-                    )
-                    writer.write(resp.encode())
-                    await writer.drain()
-                except (asyncio.TimeoutError, ConnectionError):
-                    pass
-                finally:
-                    writer.close()
-
-        server = await asyncio.start_server(handle, host, health_port)
+        server = await start_health_server(host, health_port, health_payload=_health_payload, metrics=metrics)
         _print_gateway_health_endpoint(host, health_port)
         async with server:
             await server.serve_forever()
     # Register Dream system job (idempotent on restart)
-    from nanobot.cron.types import CronJob, CronPayload, CronSchedule
+    from nanobot.cron.types import CronPayload, CronSchedule
     dream_cfg = config.agents.defaults.dream
     if dream_cfg.enabled:
         cron.register_system_job(CronJob(

@@ -51,6 +51,6 @@ Interactive `agent` and `webui` commands with the same config and explicit works
 
 ## Health Check
 
-Each gateway serves `GET /health` on `gateway.host:gateway.port`, bound to `127.0.0.1` by default. It returns `200` when the WebSocket channel is disabled or running, and `503` when enabled but not running. The JSON fields are `status`, `process`, `ready`, and `websocket`; other paths return `404`.
+Each gateway serves `GET /health` on `gateway.host:gateway.port`, bound to `127.0.0.1` by default. It returns `200` when the WebSocket channel is disabled or running, and `503` when enabled but not running. The JSON includes `status`, `process`, `ready`, `websocket`, `runtime`, and `maintenance`. Setting `gateway.metricsEnabled` to `true` also exposes `GET /metrics` on this listener; other paths return `404`. See [Prometheus Metrics](./metrics.md) for collecting each instance as a separate target.
 
 This checks process liveness and WebSocket readiness, not other chat channels, MCP servers, or model connectivity. See [CLI Reference](./cli-reference.md#gateway) for gateway management commands.

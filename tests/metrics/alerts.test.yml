@@ -1,0 +1,176 @@
+rule_files:
+  - ../../examples/prometheus/alerts.yml
+evaluation_interval: 1m
+tests:
+  - name: Readiness stopped-channel and pending-send conditions recover on fresh healthy samples
+    interval: 1m
+    input_series:
+      - series: 'up{job="nanobot",instance="bot"}'
+        values: '1+0x5'
+      - series: 'nanobot_gateway_ready{job="nanobot",instance="bot"}'
+        values: '0 0 0 1 1 1'
+      - series: 'nanobot_channel_running{job="nanobot",instance="bot",channel="napcat"}'
+        values: '0 0 0 1 1 1'
+      - series: 'nanobot_channel_oldest_pending_delivery_start_time_seconds{job="nanobot",instance="bot",channel="napcat"}'
+        values: '1 1 1 1 1 0'
+    promql_expr_test:
+      - expr: 'ALERTS{alertname="NanobotGatewayNotReady",alertstate="firing"}'
+        eval_time: 2m
+        exp_samples:
+          - labels: 'ALERTS{alertname="NanobotGatewayNotReady",alertstate="firing",job="nanobot",instance="bot",severity="critical"}'
+            value: 1
+      - expr: 'ALERTS{alertname="NanobotChannelStopped",alertstate="firing"}'
+        eval_time: 2m
+        exp_samples:
+          - labels: 'ALERTS{alertname="NanobotChannelStopped",alertstate="firing",job="nanobot",instance="bot",channel="napcat",severity="critical"}'
+            value: 1
+      - expr: 'ALERTS{alertname="NanobotDeliveryOverdue",alertstate="firing"}'
+        eval_time: 4m
+        exp_samples:
+          - labels: 'ALERTS{alertname="NanobotDeliveryOverdue",alertstate="firing",job="nanobot",instance="bot",channel="napcat",severity="warning"}'
+            value: 1
+      - expr: 'ALERTS{alertstate="firing"}'
+        eval_time: 5m
+        exp_samples: []
+  - name: Scrape failure suppresses business alerts and recovery clears it
+    interval: 1m
+    input_series:
+      - series: 'up{job="nanobot",instance="bot"}'
+        values: '0 0 0 1 1'
+      - series: 'nanobot_gateway_ready{job="nanobot",instance="bot"}'
+        values: '0 0 0 1 1'
+    promql_expr_test:
+      - expr: 'ALERTS{alertname="NanobotScrapeUnavailable",alertstate="firing"}'
+        eval_time: 2m
+        exp_samples:
+          - labels: 'ALERTS{alertname="NanobotScrapeUnavailable",alertstate="firing",job="nanobot",instance="bot",severity="critical"}'
+            value: 1
+      - expr: 'ALERTS{alertname="NanobotGatewayNotReady",alertstate="firing"}'
+        eval_time: 2m
+        exp_samples: []
+      - expr: 'ALERTS{alertstate="firing"}'
+        eval_time: 3m
+        exp_samples: []
+  - name: Connection failure is independent of running and is muted in maintenance
+    interval: 1m
+    input_series:
+      - series: 'up{job="nanobot",instance="bot"}'
+        values: '1+0x6'
+      - series: 'nanobot_gateway_maintenance{job="nanobot",instance="bot"}'
+        values: '0 0 0 1 0 0 0'
+      - series: 'nanobot_channel_running{job="nanobot",instance="bot",channel="napcat"}'
+        values: '1+0x6'
+      - series: 'nanobot_channel_connected{job="nanobot",instance="bot",channel="napcat"}'
+        values: '0 0 0 0 1 1 1'
+    promql_expr_test:
+      - expr: 'ALERTS{alertname="NanobotChannelDisconnected",alertstate="firing"}'
+        eval_time: 2m
+        exp_samples:
+          - labels: 'ALERTS{alertname="NanobotChannelDisconnected",alertstate="firing",job="nanobot",instance="bot",channel="napcat",severity="critical"}'
+            value: 1
+      - expr: 'ALERTS{alertstate="firing"}'
+        eval_time: 3m
+        exp_samples: []
+      - expr: 'ALERTS{alertstate="firing"}'
+        eval_time: 4m
+        exp_samples: []
+  - name: Adapters without a connection contract are not declared disconnected
+    interval: 1m
+    input_series:
+      - series: 'up{job="nanobot",instance="bot"}'
+        values: '1+0x5'
+      - series: 'nanobot_channel_running{job="nanobot",instance="bot",channel="webhook"}'
+        values: '1+0x5'
+    promql_expr_test:
+      - expr: 'ALERTS{alertstate="firing"}'
+        eval_time: 5m
+        exp_samples: []
+  - name: A queued item can become overdue before anything completes and dequeue clears it
+    interval: 1m
+    input_series:
+      - series: 'up{job="nanobot",instance="bot"}'
+        values: '1+0x6'
+      - series: 'nanobot_queue_oldest_enqueued_timestamp_seconds{job="nanobot",instance="bot",queue="session_inbox"}'
+        values: '1 1 1 1 1 0 0'
+    promql_expr_test:
+      - expr: 'ALERTS{alertname="NanobotQueueWaitTooLong",alertstate="firing"}'
+        eval_time: 2m
+        exp_samples: []
+      - expr: 'ALERTS{alertname="NanobotQueueWaitTooLong",alertstate="firing"}'
+        eval_time: 4m
+        exp_samples:
+          - labels: 'ALERTS{alertname="NanobotQueueWaitTooLong",alertstate="firing",job="nanobot",instance="bot",queue="session_inbox",severity="warning"}'
+            value: 1
+      - expr: 'ALERTS{alertname="NanobotQueueWaitTooLong",alertstate="firing"}'
+        eval_time: 5m
+        exp_samples: []
+  - name: Unfinished user execution is detected without completed duration samples
+    interval: 1m
+    input_series:
+      - series: 'up{job="nanobot",instance="bot"}'
+        values: '1+0x14'
+      - series: 'nanobot_agent_oldest_run_start_time_seconds{job="nanobot",instance="bot",agent_type="main",source="user"}'
+        values: '1+0x12 0 0'
+    promql_expr_test:
+      - expr: 'ALERTS{alertname="NanobotAgentRunOverdue",alertstate="firing"}'
+        eval_time: 10m
+        exp_samples: []
+      - expr: 'ALERTS{alertname="NanobotAgentRunOverdue",alertstate="firing"}'
+        eval_time: 12m
+        exp_samples:
+          - labels: 'ALERTS{alertname="NanobotAgentRunOverdue",alertstate="firing",job="nanobot",instance="bot",agent_type="main",source="user",severity="warning"}'
+            value: 1
+      - expr: 'ALERTS{alertname="NanobotAgentRunOverdue",alertstate="firing"}'
+        eval_time: 13m
+        exp_samples: []
+  - name: User failure warning requires three failed runs and expires with its window
+    interval: 1m
+    input_series:
+      - series: 'up{job="nanobot",instance="bot"}'
+        values: '1+0x30'
+      - series: 'nanobot_agent_runs_total{job="nanobot",instance="bot",agent_type="main",source="user",outcome="error"}'
+        values: '0 1 2 3+0x27'
+    promql_expr_test:
+      - expr: 'ALERTS{alertname="NanobotAgentErrors",alertstate="firing"}'
+        eval_time: 2m
+        exp_samples: []
+      - expr: 'ALERTS{alertname="NanobotAgentErrors",alertstate="firing"}'
+        eval_time: 3m
+        exp_samples:
+          - labels: 'ALERTS{alertname="NanobotAgentErrors",alertstate="firing",job="nanobot",instance="bot",agent_type="main",source="user",severity="warning"}'
+            value: 1
+      - expr: 'ALERTS{alertname="NanobotAgentErrors",alertstate="firing"}'
+        eval_time: 20m
+        exp_samples: []
+  - name: A successful retry is not a terminal delivery failure
+    interval: 1m
+    input_series:
+      - series: 'up{job="nanobot",instance="bot"}'
+        values: '1+0x4'
+      - series: 'nanobot_channel_send_attempts_total{job="nanobot",instance="bot",channel="napcat",kind="message",outcome="error"}'
+        values: '0 1 1 1 1'
+      - series: 'nanobot_channel_delivery_results_total{job="nanobot",instance="bot",channel="napcat",kind="message",outcome="returned"}'
+        values: '0 1 1 1 1'
+      - series: 'nanobot_channel_delivery_results_total{job="nanobot",instance="bot",channel="napcat",kind="message",outcome="failed"}'
+        values: '0+0x4'
+    promql_expr_test:
+      - expr: 'ALERTS{alertname="NanobotDeliveryProblem",alertstate="firing"}'
+        eval_time: 2m
+        exp_samples: []
+  - name: Confirmed failure and unknown result remain distinguishable
+    interval: 1m
+    input_series:
+      - series: 'up{job="nanobot",instance="bot"}'
+        values: '1+0x4'
+      - series: 'nanobot_channel_delivery_results_total{job="nanobot",instance="bot",channel="napcat",kind="message",outcome="failed"}'
+        values: '0 1 1 1 1'
+      - series: 'nanobot_channel_delivery_results_total{job="nanobot",instance="bot",channel="napcat",kind="message",outcome="unknown"}'
+        values: '0 1 1 1 1'
+    promql_expr_test:
+      - expr: 'ALERTS{alertname="NanobotDeliveryProblem",alertstate="firing"}'
+        eval_time: 1m
+        exp_samples:
+          - labels: 'ALERTS{alertname="NanobotDeliveryProblem",alertstate="firing",job="nanobot",instance="bot",channel="napcat",kind="message",outcome="failed",severity="warning"}'
+            value: 1
+          - labels: 'ALERTS{alertname="NanobotDeliveryProblem",alertstate="firing",job="nanobot",instance="bot",channel="napcat",kind="message",outcome="unknown",severity="warning"}'
+            value: 1

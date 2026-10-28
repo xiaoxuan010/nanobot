@@ -212,6 +212,10 @@ These variables are process-level switches. Set them in the same terminal, servi
 
 Internal variables such as `NANOBOT_RESTART_*` and `NANOBOT_PATH_*` are set by nanobot itself and are not a supported user configuration surface.
 
+## Prometheus Metrics
+
+`gateway.metricsEnabled` defaults to `false`. Set it to `true` and restart Gateway to expose `GET /metrics` on `gateway.host:gateway.port`, alongside `/health`. The endpoint supports Prometheus text and OpenMetrics. See [Prometheus Metrics and Alerts](./metrics.md) for metric contracts, alert purposes, example rules, and collection/query examples. The standalone `nanobot serve` process does not expose this endpoint.
+
 ## Langfuse Observability
 
 Use Langfuse to trace OpenAI-compatible model calls and Codex OAuth calls. Configure it with environment variables, not `config.json`.

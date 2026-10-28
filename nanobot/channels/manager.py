@@ -10,7 +10,7 @@ from collections import OrderedDict
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from contextlib import suppress
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from loguru import logger
 
@@ -25,7 +25,7 @@ from nanobot.bus.outbound_events import (
     StreamEndEvent,
     replace_outbound_event,
 )
-from nanobot.bus.queue import MessageBus
+from nanobot.bus.queue import MessageBus, TimestampedQueue
 from nanobot.channels._setup import channel_setup_spec
 from nanobot.channels.base import BaseChannel
 from nanobot.channels.contracts import (
@@ -50,6 +50,7 @@ if TYPE_CHECKING:
     from nanobot.agent.tools.registry import ToolRegistry
     from nanobot.agent.turn_policy import TurnPolicy
     from nanobot.cron.service import CronService
+    from nanobot.metrics import DeliveryOutcome, GatewayMetrics, SendKind, SendOutcome
     from nanobot.session.manager import SessionManager
     from nanobot.triggers.local_store import LocalTriggerStore
 
@@ -103,6 +104,7 @@ class ChannelManager:
         config: Config,
         bus: MessageBus,
         *,
+        metrics: GatewayMetrics | None = None,
         session_manager: "SessionManager | None" = None,
         cron_service: CronService | None = None,
         local_trigger_store: LocalTriggerStore | None = None,
@@ -130,6 +132,7 @@ class ChannelManager:
 
             config_path = get_config_path()
         self.config = config
+        self._metrics = metrics
         self._config_path = config_path.expanduser().resolve(strict=False)
         self.bus = bus
         self._session_manager = session_manager
@@ -159,7 +162,7 @@ class ChannelManager:
         self._restart_notice_task: asyncio.Task[None] | None = None
         self._outbound_tasks: dict[asyncio.Task[None], tuple[str, str]] = {}
         self._outbound_tails: dict[tuple[str, str], asyncio.Task[None]] = {}
-        self._outbound_pending: list[OutboundMessage] = []
+        self._outbound_pending = TimestampedQueue[OutboundMessage](track_age=metrics is not None)
         self._outbound_dispatching = False
         self._outbound_slots = asyncio.Semaphore(_OUTBOUND_PENDING_LIMIT)
         self._outbound_sends = asyncio.Semaphore(_OUTBOUND_CONCURRENCY)
@@ -171,6 +174,9 @@ class ChannelManager:
         self.bus.outbound_recorder = self._record_scheduled
 
         self._init_channels()
+        if metrics is not None:
+            for name in self._channel_runtime_specs:
+                metrics.register_channel(name)
         self._remove_delivery_check: Callable[[], None] | None = (
             self.bus.admission.register_pending_work(lambda: self.has_pending_delivery)
         )
@@ -267,6 +273,8 @@ class ChannelManager:
         channel.show_compaction_notices = self._resolve_bool_override(
             section, "show_compaction_notices", notice_default,
         )
+        if self._metrics is not None:
+            self._metrics.register_channel(channel.name)
         return channel
 
     def _init_channels(self) -> None:
@@ -410,6 +418,8 @@ class ChannelManager:
 
     async def _start_channel(self, name: str, channel: BaseChannel) -> None:
         """Start a channel and log any exceptions."""
+        if self._metrics is not None:
+            self._metrics.register_channel(name)
         errors = getattr(self, "_channel_errors", None)
         if errors is None:
             errors = self._channel_errors = {}
@@ -496,9 +506,11 @@ class ChannelManager:
                 "message": f"{plugin.display_name} is always enabled and is applied on restart.",
             }
 
-        from nanobot.config.loader import load_config
+        from nanobot.config.loader import load_config, resolve_config_env_vars
 
         self.config = load_config()
+        if action == "enable":
+            self.config = resolve_config_env_vars(self.config, config_path=self._config_path)
         section = self._channel_section(name, default_enabled=plugin.default_enabled)
         channel_setup_spec(name, plugin=plugin)
         instance_id = resolve_channel_action_target(instance_id)
@@ -517,6 +529,8 @@ class ChannelManager:
                 self._channel_owners.pop(runtime_name, None)
             self._channel_runtime_specs.pop(runtime_name, None)
             self._channel_errors.pop(runtime_name, None)
+            if self._metrics is not None:
+                self._metrics.unregister_channel(runtime_name)
             return {
                 "handled": True,
                 "ok": True,
@@ -786,7 +800,7 @@ class ChannelManager:
         This is delivery liveness, not proof that every channel writer stopped.
         """
         return bool(
-            self.bus.outbound_size or self._outbound_pending or self._outbound_dispatching
+            self.bus.outbound_size or not self._outbound_pending.empty() or self._outbound_dispatching
             or self._outbound_tasks
             or (self._restart_notice_task is not None and not self._restart_notice_task.done())
             or any(channel.has_pending_delivery for channel in self.channels.values())
@@ -816,10 +830,16 @@ class ChannelManager:
         if msg.delivery_id is not None:
             self._scheduled_deliveries.add(msg.delivery_id)
 
+        metrics = self._metrics
+        token = metrics.delivery_started(msg.channel) if metrics is not None and self._send_kind(msg) is not None else None
+        operation_started = False
+
         async def send() -> None:
+            nonlocal operation_started
             if previous is not None:
                 await asyncio.shield(asyncio.gather(previous, return_exceptions=True))
             async with self._outbound_sends:
+                operation_started = True
                 if msg.delivery_id is not None:
                     await self._send_scheduled(channel, msg)
                 else:
@@ -830,6 +850,10 @@ class ChannelManager:
         self._outbound_tails[key] = task
 
         def finished(done: asyncio.Task[None]) -> None:
+            if done.cancelled() and not operation_started:
+                self._record_delivery_result(msg, "cancelled")
+            if metrics is not None and token is not None:
+                metrics.delivery_ended(msg.channel, token)
             self._outbound_tasks.pop(done, None)
             if msg.delivery_id is not None:
                 self._scheduled_deliveries.discard(msg.delivery_id)
@@ -846,7 +870,7 @@ class ChannelManager:
         if request is not None and request.session_generation is not None and self._session_manager:
             session = await self._session_manager.state.read(request.session_key)
             if session is None or session.generation != request.session_generation:
-                self._outbox.finish(msg, "failed", "session_replaced")
+                self._finish_scheduled_delivery(msg, "failed", "session_replaced")
                 return
             if msg.media:
                 # An accepted local path can become a symlink during an outage.
@@ -864,7 +888,7 @@ class ChannelManager:
                                 extra_allowed_roots=[self._config_path.parent / "media"],
                             )
                 except (OSError, ValueError):
-                    self._outbox.finish(msg, "failed", "attachment_access_denied")
+                    self._finish_scheduled_delivery(msg, "failed", "attachment_access_denied")
                     return
         if not self._outbox.claim(msg):
             return
@@ -872,25 +896,25 @@ class ChannelManager:
             await self._send_once(channel, msg)
         except ChannelNotReadyError:
             # The adapter guarantees that no part of the message was submitted.
-            self._outbox.finish(msg, "pending", "channel_not_ready")
+            self._finish_scheduled_delivery(msg, "pending", "channel_not_ready")
         except DeliveryRejectedError:
-            self._outbox.finish(msg, "failed", "delivery_rejected")
+            self._finish_scheduled_delivery(msg, "failed", "delivery_rejected")
         except asyncio.CancelledError:
-            self._outbox.finish(msg, "unknown", "interrupted_send")
+            self._finish_scheduled_delivery(msg, "unknown", "interrupted_send")
             raise
         except Exception as error:
             # A timeout can follow an accepted send, including a partial multi-part send.
             # Retrying the whole result here could deliver it twice.
-            self._outbox.finish(msg, "unknown", type(error).__name__)
+            self._finish_scheduled_delivery(msg, "unknown", type(error).__name__)
         else:
-            self._outbox.finish(msg, "sent")
+            self._finish_scheduled_delivery(msg, "sent")
 
     async def _recover_scheduled(self) -> None:
         with self.bus.admission.activity():
             for msg in self._outbox.ready():
                 channel = self.channels.get(msg.channel)
                 if channel is None:
-                    self._outbox.finish(msg, "failed", "channel_disabled")
+                    self._finish_scheduled_delivery(msg, "failed", "channel_disabled")
                 else:
                     await self._queue_outbound(channel, msg)
 
@@ -920,8 +944,8 @@ class ChannelManager:
                     except Exception:
                         logger.exception("Scheduled delivery recovery failed; check the instance delivery store")
                 # First check pending buffer before waiting on queue
-                if pending:
-                    msg = pending.pop(0)
+                if not pending.empty():
+                    msg = pending.get_nowait()
                 else:
                     # wait_for creates a child task: it can remove the last
                     # queued message before this dispatcher records ownership.
@@ -974,7 +998,8 @@ class ChannelManager:
                 # to reduce API calls and improve streaming latency
                 if isinstance(event, StreamDeltaEvent):
                     msg, extra_pending = self._coalesce_stream_deltas(msg)
-                    pending.extend(extra_pending)
+                    for deferred in extra_pending:
+                        pending.put_nowait(deferred)
                     event = msg.event
 
                 channel = self.channels.get(msg.channel)
@@ -994,7 +1019,9 @@ class ChannelManager:
                 else:
                     logger.warning("Unknown channel: {}", msg.channel)
                     if msg.delivery_id is not None:
-                        self._outbox.finish(msg, "failed", "channel_disabled")
+                        self._finish_scheduled_delivery(msg, "failed", "channel_disabled")
+                    else:
+                        self._record_delivery_result(msg, "failed")
 
             except asyncio.TimeoutError:
                 continue
@@ -1060,7 +1087,47 @@ class ChannelManager:
         )
 
     @staticmethod
-    async def _send_once(channel: BaseChannel, msg: OutboundMessage) -> None:
+    def _send_kind(msg: OutboundMessage) -> SendKind | None:
+        if isinstance(msg.event, StreamedResponseEvent):
+            return None
+        event = msg.event
+        if isinstance(event, (StreamDeltaEvent, StreamEndEvent)):
+            return "stream"
+        if isinstance(event, ProgressEvent) and (event.reasoning or event.reasoning_delta or event.reasoning_end):
+            return "reasoning"
+        return "message" if event is None else "event"
+
+    def _record_delivery_result(self, msg: OutboundMessage, outcome: DeliveryOutcome) -> None:
+        kind = self._send_kind(msg)
+        if self._metrics is not None and kind is not None:
+            self._metrics.delivery_result(msg.channel, kind, outcome)
+
+    def _finish_scheduled_delivery(self, msg: OutboundMessage, status: Literal["pending", "sent", "failed", "unknown"], error: str | None = None) -> None:
+        self._outbox.finish(msg, status, error)
+        outcomes: dict[str, DeliveryOutcome] = {"pending": "deferred", "sent": "returned", "failed": "failed", "unknown": "unknown"}
+        self._record_delivery_result(msg, outcomes[status])
+
+    async def _send_once(self, channel: BaseChannel, msg: OutboundMessage) -> None:
+        kind = self._send_kind(msg)
+        if kind is None:
+            return
+        metrics = self._metrics
+        if metrics is None:
+            await self._send_once_impl(channel, msg)
+            return
+        started = time.perf_counter()
+        outcome: SendOutcome = "error"
+        try:
+            await self._send_once_impl(channel, msg)
+            outcome = "returned"
+        except asyncio.CancelledError:
+            outcome = "cancelled"
+            raise
+        finally:
+            metrics.send_finished(msg.channel, kind, outcome, time.perf_counter() - started)
+
+    @staticmethod
+    async def _send_once_impl(channel: BaseChannel, msg: OutboundMessage) -> None:
         """Send one outbound message without retry policy."""
         event = msg.event
         if isinstance(event, ProgressEvent) and event.reasoning_end:
@@ -1169,15 +1236,19 @@ class ChannelManager:
         """
         max_attempts = max(self.config.channels.send_max_retries, 1)
         attempt = 0
+        uncertain = False
 
         while True:
             attempt += 1
             try:
                 await self._send_once(channel, msg)
+                self._record_delivery_result(msg, "returned")
                 return  # Send succeeded
             except asyncio.CancelledError:
+                self._record_delivery_result(msg, "unknown")
                 raise  # Propagate cancellation for graceful shutdown
             except Exception as e:
+                uncertain = uncertain or not isinstance(e, (ChannelNotReadyError, DeliveryRejectedError))
                 if isinstance(e, DeliveryRejectedError) or not channel.should_retry_send_error(e):
                     logger.error(
                         "Send to {} failed with a non-retryable {}: {}",
@@ -1185,6 +1256,7 @@ class ChannelManager:
                         type(e).__name__,
                         e,
                     )
+                    self._record_delivery_result(msg, "unknown" if uncertain else "failed")
                     return
                 loop = asyncio.get_running_loop()
                 exhausted = (
@@ -1197,6 +1269,7 @@ class ChannelManager:
                         "Failed to send to {} after {} attempts",
                         msg.channel, attempt,
                     )
+                    self._record_delivery_result(msg, "unknown" if uncertain else "failed")
                     return
                 delay = _SEND_RETRY_DELAYS[min(attempt - 1, len(_SEND_RETRY_DELAYS) - 1)]
                 if deadline is not None:
@@ -1211,6 +1284,7 @@ class ChannelManager:
                 try:
                     await asyncio.sleep(delay)
                 except asyncio.CancelledError:
+                    self._record_delivery_result(msg, "unknown" if uncertain else "cancelled")
                     raise  # Propagate cancellation during sleep
 
     def turn_policy(self, message: InboundMessage, session_key: str, tools: ToolRegistry) -> TurnPolicy | None:
@@ -1221,6 +1295,23 @@ class ChannelManager:
     def get_channel(self, name: str) -> BaseChannel | None:
         """Get a channel by name."""
         return self.channels.get(name)
+
+    @property
+    def outbound_deliveries_pending(self) -> int:
+        """Scheduled sends still waiting or executing."""
+        return len(self._outbound_tasks)
+
+    @property
+    def outbound_buffer_size(self) -> int:
+        """Coalescing-buffer entries awaiting dispatch."""
+        return self._outbound_pending.qsize()
+
+    @property
+    def outbound_buffer_oldest_enqueued_at(self) -> float:
+        return self._outbound_pending.oldest_enqueued_at
+
+    def get_connection_status(self) -> dict[str, bool]:
+        return {name: connected for name, channel in self.channels.items() if (connected := channel.is_connected) is not None}
 
     def get_status(self) -> dict[str, Any]:
         """Return actual runtime state, including enabled runtimes that failed."""

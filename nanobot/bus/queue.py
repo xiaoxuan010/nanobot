@@ -1,10 +1,14 @@
 """Queued delivery of messages and typed events between core and channels."""
 
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import inspect
+import time
+from collections import deque
 from collections.abc import Awaitable, Callable, Mapping
-from typing import Any, TypeVar, overload
+from typing import TYPE_CHECKING, Any, TypeVar, overload
 
 from loguru import logger
 
@@ -13,8 +17,36 @@ from nanobot.bus.outbound_events import outbound_message_for_event
 from nanobot.events import AgentEvent
 from nanobot.runtime_admission import RuntimeAdmission
 
+if TYPE_CHECKING:
+    from nanobot.metrics import GatewayMetrics
+
 _EventT = TypeVar("_EventT", bound=AgentEvent)
+_ItemT = TypeVar("_ItemT")
 EventHandler = Callable[[AgentEvent], Awaitable[None] | None]
+
+
+class TimestampedQueue(asyncio.Queue[_ItemT]):
+    """FIFO with enqueue timestamps when runtime metrics are enabled."""
+
+    def __init__(self, *, track_age: bool):
+        super().__init__()
+        self._track_age = track_age
+        self._enqueued_at: deque[float] = deque()
+
+    def _put(self, item: _ItemT) -> None:
+        super()._put(item)
+        if self._track_age:
+            self._enqueued_at.append(time.time())
+
+    def _get(self) -> _ItemT:
+        item = super()._get()
+        if self._track_age:
+            self._enqueued_at.popleft()
+        return item
+
+    @property
+    def oldest_enqueued_at(self) -> float:
+        return self._enqueued_at[0] if self._enqueued_at else 0.0
 
 
 class MessageBus:
@@ -29,10 +61,11 @@ class MessageBus:
     ``publish_event``. Local state transitions never wait for network sends.
     """
 
-    def __init__(self, *, admission: RuntimeAdmission | None = None):
+    def __init__(self, *, admission: RuntimeAdmission | None = None, metrics: GatewayMetrics | None = None):
+        self._metrics = metrics
         self.admission = admission if admission is not None else RuntimeAdmission()
-        self.inbound: asyncio.Queue[InboundMessage] = asyncio.Queue()
-        self.outbound: asyncio.Queue[OutboundMessage] = asyncio.Queue()
+        self.inbound = TimestampedQueue[InboundMessage](track_age=metrics is not None)
+        self.outbound = TimestampedQueue[OutboundMessage](track_age=metrics is not None)
         self._handlers: list[EventHandler] = []
         self._pending: set[asyncio.Task[None]] = set()
         self.outbound_recorder: Callable[[OutboundMessage], None] | None = None
@@ -42,6 +75,8 @@ class MessageBus:
         self.admission.check()
         # This queue is unbounded. Admission and enqueue must not yield apart.
         self.inbound.put_nowait(msg)
+        if self._metrics is not None:
+            self._metrics.inbound_received(msg.channel)
 
     async def consume_inbound(self) -> InboundMessage:
         """Consume the next inbound message (blocks until available)."""
@@ -84,6 +119,14 @@ class MessageBus:
     def outbound_size(self) -> int:
         """Number of pending outbound messages."""
         return self.outbound.qsize()
+
+    @property
+    def inbound_oldest_enqueued_at(self) -> float:
+        return self.inbound.oldest_enqueued_at
+
+    @property
+    def outbound_oldest_enqueued_at(self) -> float:
+        return self.outbound.oldest_enqueued_at
 
     @property
     def has_pending_events(self) -> bool:

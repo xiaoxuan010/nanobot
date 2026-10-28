@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import Callable
 from contextlib import nullcontext
 from functools import cache
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from loguru import logger
 
@@ -19,6 +20,9 @@ from nanobot.utils.runtime import (
     repeated_external_lookup_error,
     repeated_workspace_violation_error,
 )
+
+if TYPE_CHECKING:
+    from nanobot.metrics import CallOutcome, GatewayMetrics
 
 # SSRF is a hard security block at the tool boundary, but the agent turn
 # should recover conversationally instead of aborting the runtime.
@@ -57,6 +61,7 @@ async def execute_tool_calls(
     context: AgentHookContext,
     model_messages: list[dict[str, Any]] | None = None,
     compacted_tool_results: set[str] | None = None,
+    metrics: GatewayMetrics | None = None,
 ) -> tuple[list[Any], list[dict[str, str]]]:
     """Execute one model response's tool calls in stable result order."""
     @cache
@@ -82,6 +87,7 @@ async def execute_tool_calls(
                     hook,
                     context,
                     read_results,
+                    metrics=metrics,
                 )
                 for tool_call in batch
             ))
@@ -96,6 +102,7 @@ async def execute_tool_calls(
                     hook,
                     context,
                     read_results,
+                    metrics=metrics,
                 )
                 tool_results.append(result)
 
@@ -105,6 +112,33 @@ async def execute_tool_calls(
 
 
 async def _execute_tool_call(
+    tools: ToolRegistry,
+    tool_call: ToolCallRequest,
+    external_lookup_counts: dict[str, int],
+    workspace_violation_counts: dict[str, int],
+    hook: AgentHook,
+    context: AgentHookContext,
+    read_results: Callable[[], dict[str, str]],
+    *,
+    metrics: GatewayMetrics | None = None,
+) -> tuple[Any, dict[str, str]]:
+    if metrics is None:
+        return await _execute_tool_call_impl(tools, tool_call, external_lookup_counts, workspace_violation_counts, hook, context, read_results)
+    name = tool_call.name if tools.get(tool_call.name) is not None else "unregistered"
+    started = time.perf_counter()
+    outcome: CallOutcome = "error"
+    try:
+        result, event = await _execute_tool_call_impl(tools, tool_call, external_lookup_counts, workspace_violation_counts, hook, context, read_results)
+        outcome = "success" if event["status"] == "ok" else "error"
+        return result, event
+    except asyncio.CancelledError:
+        outcome = "cancelled"
+        raise
+    finally:
+        metrics.tool_finished(name, outcome, time.perf_counter() - started)
+
+
+async def _execute_tool_call_impl(
     tools: ToolRegistry,
     tool_call: ToolCallRequest,
     external_lookup_counts: dict[str, int],

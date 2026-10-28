@@ -1,0 +1,103 @@
+# 示例策略：请按工作负载调整阈值，并将 job 选择器改为实际的采集任务名。
+groups:
+  - name: nanobot
+    rules:
+      - record: nanobot:operational
+        expr: (up{job="nanobot"} == 1) unless on (job, instance) (nanobot_gateway_maintenance == 1)
+
+      - alert: NanobotScrapeUnavailable
+        expr: up{job="nanobot"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: '无法采集 nanobot {{ $labels.instance }}'
+          description: 'Prometheus 连续 2 分钟无法采集。检查采集错误、Gateway 进程和健康端口；此状态无法确定进程或渠道是否仍在工作。'
+
+      - alert: NanobotGatewayNotReady
+        expr: (nanobot_gateway_ready == 0) and on (job, instance) nanobot:operational
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'nanobot {{ $labels.instance }} 尚未就绪'
+          description: '/health 连续 2 分钟不满足就绪条件。检查健康响应及必需的 WebSocket 渠道启动错误。'
+
+      - alert: NanobotChannelStopped
+        expr: (nanobot_channel_running == 0) and on (job, instance) nanobot:operational
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'nanobot 渠道 {{ $labels.channel }} 已停止运行'
+          description: '{{ $labels.instance }} 的适配器连续 2 分钟报告未运行。检查渠道启动配置和运行日志。'
+
+      - alert: NanobotChannelDisconnected
+        expr: |
+          (nanobot_channel_connected == 0)
+          and on (job, instance, channel) (nanobot_channel_running == 1)
+          and on (job, instance) nanobot:operational
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'nanobot 渠道 {{ $labels.channel }} 的传输连接已断开'
+          description: '{{ $labels.instance }} 的渠道任务在运行，但连接连续 2 分钟未建立。检查适配器重连日志和服务端；NapCat 此处仅表示 OneBot WebSocket 连接状态。'
+
+      - alert: NanobotAgentErrors
+        expr: |
+          (sum by (job, instance, agent_type, source) (
+            increase(nanobot_agent_runs_total{agent_type="main",source="user",outcome="error"}[15m])
+          ) >= 3)
+          and on (job, instance) nanobot:operational
+        labels:
+          severity: warning
+        annotations:
+          summary: 'nanobot 用户执行反复失败'
+          description: '{{ $labels.instance }} 在 15 分钟窗口内至少出现 3 次用户主执行错误。检查执行记录，再按 Provider 和工具指标定位原因；成功重试的 Provider 错误不单独触发本规则。'
+
+      - alert: NanobotAgentRunOverdue
+        expr: |
+          (time() - nanobot_agent_oldest_run_start_time_seconds{agent_type="main",source="user"} > 600)
+          and (nanobot_agent_oldest_run_start_time_seconds{agent_type="main",source="user"} > 0)
+          and on (job, instance) nanobot:operational
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'nanobot 用户执行长时间未结束'
+          description: '{{ $labels.instance }} 有用户主执行超过 10 分钟，且持续观察到 1 分钟。检查活动任务、模型和工具耗时；允许长任务的实例应调整此阈值。'
+
+      - alert: NanobotQueueWaitTooLong
+        expr: |
+          (time() - nanobot_queue_oldest_enqueued_timestamp_seconds > 120)
+          and (nanobot_queue_oldest_enqueued_timestamp_seconds > 0)
+          and on (job, instance) nanobot:operational
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'nanobot 队列 {{ $labels.queue }} 等待过久'
+          description: '{{ $labels.instance }} 的队首条目等待超过 2 分钟，且持续观察到 1 分钟。结合队列长度和活动执行数定位阻塞阶段。'
+
+      - alert: NanobotDeliveryOverdue
+        expr: |
+          (time() - nanobot_channel_oldest_pending_delivery_start_time_seconds > 120)
+          and (nanobot_channel_oldest_pending_delivery_start_time_seconds > 0)
+          and on (job, instance) nanobot:operational
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'nanobot 渠道 {{ $labels.channel }} 的发送任务等待过久'
+          description: '{{ $labels.instance }} 有已调度的发送任务超过 2 分钟尚未结束，且持续观察到 1 分钟。检查同一目标的前序发送、并发额度和适配器操作耗时。'
+
+      - alert: NanobotDeliveryProblem
+        expr: |
+          (increase(nanobot_channel_delivery_results_total{kind="message",outcome=~"failed|unknown"}[15m]) >= 1)
+          and on (job, instance) nanobot:operational
+        labels:
+          severity: warning
+        annotations:
+          summary: 'nanobot 渠道 {{ $labels.channel }} 的消息处理结果为 {{ $labels.outcome }}'
+          description: '{{ $labels.instance }} 在 15 分钟窗口内出现消息发送失败或结果未知。failed 表示发送前拒绝，unknown 表示可能已提交；检查 outbox 和适配器日志，确认 unknown 的实际结果后再决定补发。returned 只表示适配器正常返回。'

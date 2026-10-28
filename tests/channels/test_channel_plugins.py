@@ -2881,6 +2881,7 @@ async def test_manager_skips_disabled_channel_package(monkeypatch):
 
     _stub_channel_registry(monkeypatch, _channel_plugin(_FakePlugin))
     mgr = ChannelManager.__new__(ChannelManager)
+    mgr._metrics = None
     mgr.config = fake_config
     mgr.bus = MessageBus()
     mgr.channels = {}
@@ -2991,6 +2992,7 @@ async def test_send_with_retry_succeeds_first_try():
     )
 
     mgr = ChannelManager.__new__(ChannelManager)
+    mgr._metrics = None
     mgr.config = fake_config
     mgr.bus = MessageBus()
     mgr.channels = {"failing": _FailingChannel(fake_config, mgr.bus)}
@@ -3028,6 +3030,7 @@ async def test_send_with_retry_retries_on_failure():
     )
 
     mgr = ChannelManager.__new__(ChannelManager)
+    mgr._metrics = None
     mgr.config = fake_config
     mgr.bus = MessageBus()
     mgr.channels = {"failing": _FailingChannel(fake_config, mgr.bus)}
@@ -3069,6 +3072,7 @@ async def test_send_with_retry_no_retry_when_max_is_zero():
     )
 
     mgr = ChannelManager.__new__(ChannelManager)
+    mgr._metrics = None
     mgr.config = fake_config
     mgr.bus = MessageBus()
     mgr.channels = {"failing": _FailingChannel(fake_config, mgr.bus)}
@@ -3119,6 +3123,7 @@ async def test_send_with_retry_calls_send_delta():
     )
 
     mgr = ChannelManager.__new__(ChannelManager)
+    mgr._metrics = None
     mgr.config = fake_config
     mgr.bus = MessageBus()
     mgr.channels = {"streaming": _StreamingChannel(fake_config, mgr.bus)}
@@ -3187,6 +3192,7 @@ async def test_send_with_retry_skips_send_when_streamed():
     )
 
     mgr = ChannelManager.__new__(ChannelManager)
+    mgr._metrics = None
     mgr.config = fake_config
     mgr.bus = MessageBus()
     mgr.channels = {"streamed": _StreamedChannel(fake_config, mgr.bus)}
@@ -3211,6 +3217,7 @@ def test_outbound_duplicate_suppression_is_scoped_to_origin_message() -> None:
     )
 
     mgr = ChannelManager.__new__(ChannelManager)
+    mgr._metrics = None
     mgr.config = fake_config
     mgr.bus = MessageBus()
     mgr.channels = {}
@@ -3250,6 +3257,7 @@ def test_outbound_duplicate_suppression_is_scoped_to_origin_message() -> None:
 
 def test_outbound_duplicate_suppression_cache_is_bounded() -> None:
     mgr = ChannelManager.__new__(ChannelManager)
+    mgr._metrics = None
     mgr._origin_reply_fingerprints = OrderedDict()
 
     for index in range(ORIGIN_REPLY_FINGERPRINTS_MAX_SIZE):
@@ -3303,6 +3311,7 @@ async def test_send_with_retry_propagates_cancelled_error():
     )
 
     mgr = ChannelManager.__new__(ChannelManager)
+    mgr._metrics = None
     mgr.config = fake_config
     mgr.bus = MessageBus()
     mgr.channels = {"cancelling": _CancellingChannel(fake_config, mgr.bus)}
@@ -3340,6 +3349,7 @@ async def test_send_with_retry_propagates_cancelled_error_during_sleep():
     )
 
     mgr = ChannelManager.__new__(ChannelManager)
+    mgr._metrics = None
     mgr.config = fake_config
     mgr.bus = MessageBus()
     mgr.channels = {"failing": _FailingChannel(fake_config, mgr.bus)}
@@ -3414,6 +3424,7 @@ async def test_validate_allow_from_allows_empty_list():
     )
 
     mgr = ChannelManager.__new__(ChannelManager)
+    mgr._metrics = None
     mgr.config = fake_config
     mgr.channels = {"test": _ChannelWithAllowFrom(fake_config, None, [])}
     mgr._dispatch_task = None
@@ -3433,6 +3444,7 @@ async def test_validate_allow_from_passes_with_asterisk():
     )
 
     mgr = ChannelManager.__new__(ChannelManager)
+    mgr._metrics = None
     mgr.config = fake_config
     mgr.channels = {"test": _ChannelWithAllowFrom(fake_config, None, ["*"])}
     mgr._dispatch_task = None
@@ -3452,6 +3464,7 @@ async def test_validate_allow_from_allows_empty_dict_allow_from():
     )
 
     mgr = ChannelManager.__new__(ChannelManager)
+    mgr._metrics = None
     mgr.config = fake_config
     mgr.channels = {"test": _ChannelWithAllowFrom({"enabled": True}, None, [])}
     mgr._dispatch_task = None
@@ -3483,6 +3496,7 @@ async def test_validate_allow_from_allows_missing_allow_from():
             pass
 
     mgr = ChannelManager.__new__(ChannelManager)
+    mgr._metrics = None
     mgr.config = fake_config
     mgr.channels = {"test": _NoAllowFromChannel({"enabled": True}, None)}
     mgr._dispatch_task = None
@@ -3502,6 +3516,7 @@ async def test_get_channel_returns_channel_if_exists():
     )
 
     mgr = ChannelManager.__new__(ChannelManager)
+    mgr._metrics = None
     mgr.config = fake_config
     mgr.bus = MessageBus()
     mgr.channels = {"telegram": _StartableChannel(fake_config, mgr.bus)}
@@ -3520,6 +3535,7 @@ async def test_get_status_returns_running_state():
     )
 
     mgr = ChannelManager.__new__(ChannelManager)
+    mgr._metrics = None
     mgr.config = fake_config
     mgr.bus = MessageBus()
     ch = _StartableChannel(fake_config, mgr.bus)
@@ -3541,6 +3557,7 @@ async def test_enabled_channels_returns_channel_names():
     )
 
     mgr = ChannelManager.__new__(ChannelManager)
+    mgr._metrics = None
     mgr.config = fake_config
     mgr.bus = MessageBus()
     mgr.channels = {
@@ -3611,6 +3628,7 @@ async def test_start_channel_logs_error_on_failure():
     )
 
     mgr = ChannelManager.__new__(ChannelManager)
+    mgr._metrics = None
     mgr.config = fake_config
     mgr.bus = MessageBus()
     mgr.channels = {}
@@ -3765,6 +3783,7 @@ async def test_notify_restart_done_waits_until_channel_starts():
     )
 
     mgr = ChannelManager.__new__(ChannelManager)
+    mgr._metrics = None
     mgr.config = fake_config
     mgr.bus = MessageBus()
     channel = _StartableChannel(fake_config, mgr.bus)
@@ -3799,6 +3818,7 @@ async def test_websocket_restart_notice_does_not_overwrite_recovery_state():
         providers=SimpleNamespace(groq=SimpleNamespace(api_key="")),
     )
     mgr = ChannelManager.__new__(ChannelManager)
+    mgr._metrics = None
     mgr.config = fake_config
     mgr.bus = MessageBus()
     channel = _StartableChannel(fake_config, mgr.bus)
@@ -3833,6 +3853,7 @@ async def test_restart_notice_retries_until_running_channel_accepts_delivery():
         providers=SimpleNamespace(groq=SimpleNamespace(api_key="")),
     )
     mgr = ChannelManager.__new__(ChannelManager)
+    mgr._metrics = None
     mgr.config = fake_config
     mgr.bus = MessageBus()
     channel = _EventuallyDeliverableChannel(fake_config, mgr.bus)
