@@ -493,6 +493,10 @@
         "gateway_heartbeat_enabled": {"label": "Vérification périodique", "help": "Vérifiez régulièrement les tâches dans HEARTBEAT.md.\n\nRecherche régulièrement des tâches dans HEARTBEAT.md."},
         "gateway_heartbeat_interval_s": {"label": "Intervalle de vérification", "help": "Secondes entre les vérifications du heartbeat.\n\nLa passerelle programme les vérifications à son démarrage."},
         "agents_defaults_max_tool_iterations": {"label": "Cycles d’outils", "help": "Nombre maximal de cycles d’outils par réponse.\n\nNombre maximal d’échanges entre le modèle et les outils par tour."},
+        "agents_defaults_subagent_model_preset": {
+          "label": "Modèle des sous-agents",
+          "help": "Modèle par défaut des nouvelles tâches des sous-agents.\n\nLes changements s’appliquent immédiatement aux nouvelles tâches. Les tâches déjà créées conservent leur modèle. Le modèle parent suit la conversation actuelle."
+        },
         "agents_defaults_max_concurrent_subagents": {"label": "Sous-agents simultanés", "help": "Nombre maximal de sous-agents exécutés en même temps.\n\nNombre maximal de sous-agents exécutés en parallèle."},
         "agents_defaults_max_tool_result_chars": {"label": "Longueur du résultat", "help": "Limite de caractères par résultat d’outil envoyé au modèle.\n\nLimite la sortie des outils incluse dans le contexte du modèle."},
         "agents_defaults_provider_retry_mode": {"label": "Réessayer en continu", "help": "Réessayez les erreurs récupérables ; désactivez pour les tentatives standard.\n\nRelance les requêtes après une erreur temporaire du modèle. Désactivez cette option pour limiter le nombre de tentatives."},
@@ -560,7 +564,7 @@
         "minutes": "minutes",
         "numberError": "Saisissez un nombre entier de minutes supérieur ou égal à zéro."
       },
-      "numberError": "Saisissez un nombre valide dans la plage autorisée.", "activeModel": "Utiliser le modèle actif", "none": "Aucun",
+      "numberError": "Saisissez un nombre valide dans la plage autorisée.", "parentModel": "Modèle parent", "activeModel": "Utiliser le modèle actif", "none": "Aucun",
       "auto": "Automatique", "manual": "Manuel", "standard": "Standard", "persistent": "Continu",
       "unavailable": "Mettez à jour la passerelle pour modifier ces paramètres.", "advancedOptions": "Options avancées"
     },

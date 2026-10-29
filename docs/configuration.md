@@ -2537,6 +2537,22 @@ The heartbeat appears as `heartbeat` when you list cron jobs, but cannot be remo
 To customize which heartbeat results trigger a notification, place your prompt at `<workspace>/prompts/evaluator.md`. Start from the bundled `evaluator.md` prompt and keep its instruction to call `evaluate_notification`; without that call, no notification is sent.
 
 
+## Subagent Models
+
+Open **Settings → Advanced** and select **Subagent model** under **Run limits**. Choose **Parent model** to follow the current conversation, or choose a configured model preset. Changes apply immediately to newly created tasks; queued and running tasks keep the model configuration captured when they were created.
+
+`agents.defaults.subagentModelPreset` defaults to `null` (parent model). Set it to a preset name to use that preset by default. The implicit `default` preset refers to the direct `agents.defaults.*` model configuration; it is separate from following the parent conversation. Renaming a preset updates this setting. Deleting the selected preset through the WebUI resets it to the parent model.
+
+The agent can override the default for one task with the `subagent` tool's `model_preset` parameter:
+
+| `model_preset` | Selection |
+| --- | --- |
+| Omitted or `null` | Configured subagent default |
+| `""` | Parent conversation's model |
+| Preset name | That preset's provider, model, context window, and generation settings |
+
+Call `subagent(action="check")` without `task_id` to retrieve tasks, `default_model_preset`, and `model_presets` (name, model, and provider). Invalid preset arguments return a tool error with the current selections and usage guidance, without creating a task. The optional `temperature` argument overrides the selected runtime's temperature for that task.
+
 ## Subagent Concurrency
 
 Open **Settings → Advanced** and change **Concurrent subagents** under **Run limits**. Follow any restart prompt.

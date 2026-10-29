@@ -511,6 +511,10 @@
           "label": "交互上限",
           "help": "每次回复最多与工具交互多少轮\n\n每次回复中，模型与工具最多可以交互多少轮。"
         },
+        "agents_defaults_subagent_model_preset": {
+          "label": "子代理模型",
+          "help": "新建子代理默认使用的模型\n\n保存后立即用于新任务，已创建任务保留原模型。主代理模型跟随当前会话。"
+        },
         "agents_defaults_max_concurrent_subagents": {
           "label": "并发上限",
           "help": "同时执行任务的子智能体数量上限"
@@ -747,6 +751,7 @@
         "numberError": "请输入非负整数分钟数。"
       },
       "numberError": "请输入允许范围内的有效数字。",
+      "parentModel": "主代理模型",
       "activeModel": "使用当前模型",
       "none": "无",
       "auto": "自动",

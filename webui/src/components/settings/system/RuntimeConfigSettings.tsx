@@ -269,7 +269,7 @@ export function RuntimeConfigSettings({
                               <ProviderPicker triggerProps={{ ...common, disabled: disabled || state.saving === group.id || isRestarting }}
                                 value={String(current) || "__none__"} emptyLabel={tr("none")}
                                 providers={options.map((option) => ({ name: option || "__none__", label:
-                                  !option ? tr(field.kind === "preset" ? "activeModel" : "none")
+                                  !option ? tr(field.path === "agents.defaults.subagent_model_preset" ? "parentModel" : field.kind === "preset" ? "activeModel" : "none")
                                     : ["auto", "manual", "standard", "persistent"].includes(option) ? tr(option) : option,
                                 }))}
                                 onChange={(next) => state.change(field, next === "__none__" ? "" : next)} />

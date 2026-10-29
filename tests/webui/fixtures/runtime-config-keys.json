@@ -5,6 +5,7 @@
   "agents.defaults.session_ttl_minutes",
   "agents.defaults.max_tool_iterations",
   "agents.defaults.max_concurrent_subagents",
+  "agents.defaults.subagent_model_preset",
   "agents.defaults.max_tool_result_chars",
   "agents.defaults.provider_retry_mode",
   "agents.defaults.tool_hint_max_length",

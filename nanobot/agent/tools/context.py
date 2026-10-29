@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Callable, Protocol, runtime_checkable
 from nanobot.config.network import NetworkConfig
 
 if TYPE_CHECKING:
+    from nanobot.agent.model_runtime import ModelRuntimeResolver
     from nanobot.agent.subagent import SubagentManager
     from nanobot.agent.tools.exec_session import ExecSessionManager
     from nanobot.agent.tools.file_state import FileStates
@@ -108,3 +109,4 @@ class ToolContext:
     timezone: str = "UTC"
     workspace_sandbox: WorkspaceSandboxStatus | None = None
     runtime_control: RuntimeControl | None = None
+    model_runtime_resolver: ModelRuntimeResolver | None = None

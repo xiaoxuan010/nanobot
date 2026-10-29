@@ -487,7 +487,7 @@ def _run_claimed_gateway(
     update_profile: "ProfileReceipt | None" = None,
 ) -> None:
     """Initialize and run only while the caller holds the gateway lifecycle claim."""
-    from nanobot.agent.model_presets import load_model_preset_catalog
+    from nanobot.agent.model_presets import load_model_preset_catalog, load_subagent_model_preset
     from nanobot.agent.tools.message import MessageTool
     from nanobot.agent.turn_delivery import TurnDeliveryFactory
     from nanobot.bus.queue import MessageBus
@@ -629,7 +629,8 @@ def _run_claimed_gateway(
         cron_service=cron,
         session_manager=session_manager,
         provider_snapshot_loader=_load_gateway_provider_snapshot,
-        preset_catalog_loader=load_model_preset_catalog,
+        preset_catalog_loader=lambda: load_model_preset_catalog(Path(config_path)),
+        subagent_model_preset_loader=lambda: load_subagent_model_preset(Path(config_path)),
         turn_delivery_factory=turn_delivery_factory,
         provider_signature=provider_snapshot.signature,
         local_trigger_store=trigger_store,

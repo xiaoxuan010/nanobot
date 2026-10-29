@@ -882,6 +882,8 @@ def _rename_model_configuration(config: Config, old_name: str, new_name: str) ->
     ]
     if defaults.dream.model_override == old_name:
         defaults.dream.model_override = new_name
+    if defaults.subagent_model_preset == old_name:
+        defaults.subagent_model_preset = new_name
     return True
 
 
@@ -1597,6 +1599,8 @@ def delete_model_configuration(config: Config, query: QueryParams) -> None:
             status=409,
         )
     defaults.fallback_models = [fallback for fallback in defaults.fallback_models if fallback != name]
+    if defaults.subagent_model_preset == name:
+        defaults.subagent_model_preset = None
     del config.model_presets[name]
 
 

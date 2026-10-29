@@ -493,6 +493,10 @@
         "gateway_heartbeat_enabled": {"label": "주기적 확인", "help": "HEARTBEAT.md의 작업을 정기적으로 확인합니다.\n\nHEARTBEAT.md의 작업을 주기적으로 확인합니다."},
         "gateway_heartbeat_interval_s": {"label": "확인 간격", "help": "하트비트 확인 간격입니다. 단위는 초입니다.\n\n게이트웨이가 시작될 때 기본 주기적 확인을 예약합니다."},
         "agents_defaults_max_tool_iterations": {"label": "도구 실행 횟수", "help": "답변당 도구 실행 횟수의 상한입니다.\n\n한 턴에서 모델과 도구가 상호작용하는 최대 횟수입니다."},
+        "agents_defaults_subagent_model_preset": {
+          "label": "하위 에이전트 모델",
+          "help": "새 하위 에이전트 작업의 기본 모델입니다.\n\n변경 사항은 새 작업에 즉시 적용됩니다. 이미 생성된 작업은 기존 모델을 유지합니다. 상위 모델은 현재 대화를 따릅니다."
+        },
         "agents_defaults_max_concurrent_subagents": {"label": "동시 하위 에이전트", "help": "동시에 실행하는 하위 에이전트의 상한입니다.\n\n동시에 실행할 수 있는 하위 에이전트 수입니다."},
         "agents_defaults_max_tool_result_chars": {"label": "결과 길이", "help": "모델에 전달하는 도구 결과당 글자 수 상한입니다.\n\n모델 컨텍스트에 포함되는 도구 출력의 길이를 제한합니다."},
         "agents_defaults_provider_retry_mode": {"label": "계속 재시도", "help": "복구 가능한 오류는 계속 재시도합니다. 끄면 기본 재시도를 사용합니다.\n\n일시적인 오류로 모델 요청이 실패하면 계속 재시도합니다. 끄면 재시도 횟수를 제한합니다."},
@@ -560,7 +564,7 @@
         "minutes": "분",
         "numberError": "분 단위로 0 이상의 정수를 입력하세요."
       },
-      "numberError": "허용 범위 내의 유효한 숫자를 입력하세요.", "activeModel": "현재 모델 사용", "none": "없음",
+      "numberError": "허용 범위 내의 유효한 숫자를 입력하세요.", "parentModel": "상위 모델", "activeModel": "현재 모델 사용", "none": "없음",
       "auto": "자동", "manual": "수동", "standard": "표준", "persistent": "계속",
       "unavailable": "이 설정을 편집하려면 게이트웨이를 업데이트하세요.", "advancedOptions": "고급 옵션"
     },

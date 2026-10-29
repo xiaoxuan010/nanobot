@@ -36,6 +36,7 @@ export const RUNTIME_CONFIG_FIELDS: RuntimeConfigField[] = [
   { group: "execution", path: "agents.defaults.provider_retry_mode", kind: "toggle", options: ["standard", "persistent"] },
   { group: "execution", path: "agents.defaults.max_tool_iterations", kind: "number", min: 1 },
   { group: "execution", path: "agents.defaults.max_concurrent_subagents", kind: "number", min: 1 },
+  { group: "execution", path: "agents.defaults.subagent_model_preset", kind: "preset" },
   { group: "execution", path: "agents.defaults.max_tool_result_chars", kind: "number", min: 1 },
   { group: "execution", path: "agents.defaults.tool_hint_max_length", kind: "number", min: 20, max: 500 },
   { group: "execution", path: "tools.max_session_messages_per_minute", kind: "number", min: 1 },

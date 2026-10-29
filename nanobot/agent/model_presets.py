@@ -39,6 +39,14 @@ def load_model_preset_catalog(
     )
 
 
+def load_subagent_model_preset(config_path: Path | None = None) -> str | None:
+    """Read the default selection used for newly created subagent tasks."""
+    from nanobot.config.loader import load_config, resolve_config_env_vars
+
+    config = resolve_config_env_vars(load_config(config_path), config_path=config_path)
+    return config.agents.defaults.subagent_model_preset
+
+
 def make_preset_snapshot_loader(
     config: Config,
     provider_snapshot_loader: Callable[..., ProviderSnapshot] | None,

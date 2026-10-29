@@ -493,6 +493,10 @@
         "gateway_heartbeat_enabled": {"label": "Kiểm tra định kỳ", "help": "Kiểm tra tác vụ trong HEARTBEAT.md định kỳ.\n\nKiểm tra các tác vụ trong HEARTBEAT.md định kỳ."},
         "gateway_heartbeat_interval_s": {"label": "Khoảng kiểm tra", "help": "Số giây giữa các lần kiểm tra heartbeat.\n\nGateway lên lịch kiểm tra định kỳ khi khởi động."},
         "agents_defaults_max_tool_iterations": {"label": "Số lượt công cụ", "help": "Số lượt công cụ tối đa mỗi câu trả lời.\n\nSố lần trao đổi tối đa giữa mô hình và công cụ trong một lượt."},
+        "agents_defaults_subagent_model_preset": {
+          "label": "Mô hình tác nhân phụ",
+          "help": "Mô hình mặc định cho tác vụ mới của tác nhân phụ.\n\nThay đổi áp dụng ngay cho tác vụ mới. Tác vụ đã tạo giữ nguyên mô hình. Mô hình tác nhân chính theo cuộc trò chuyện hiện tại."
+        },
         "agents_defaults_max_concurrent_subagents": {"label": "Subagent đồng thời", "help": "Số subagent chạy đồng thời tối đa.\n\nSố tác nhân phụ tối đa chạy cùng lúc."},
         "agents_defaults_max_tool_result_chars": {"label": "Độ dài kết quả", "help": "Giới hạn ký tự mỗi kết quả công cụ gửi đến mô hình.\n\nGiới hạn đầu ra công cụ được đưa vào ngữ cảnh mô hình."},
         "agents_defaults_provider_retry_mode": {"label": "Tiếp tục thử lại", "help": "Thử lại khi lỗi có thể khắc phục; tắt để dùng cách thử lại tiêu chuẩn.\n\nTự động thử lại khi yêu cầu gửi đến mô hình gặp lỗi tạm thời. Tắt tùy chọn này để giới hạn số lần thử lại."},
@@ -560,7 +564,7 @@
         "minutes": "phút",
         "numberError": "Nhập số phút là số nguyên không âm."
       },
-      "numberError": "Nhập số hợp lệ trong phạm vi cho phép.", "activeModel": "Dùng mô hình hiện tại", "none": "Không có",
+      "numberError": "Nhập số hợp lệ trong phạm vi cho phép.", "parentModel": "Mô hình tác nhân chính", "activeModel": "Dùng mô hình hiện tại", "none": "Không có",
       "auto": "Tự động", "manual": "Thủ công", "standard": "Tiêu chuẩn", "persistent": "Liên tục",
       "unavailable": "Cập nhật gateway để chỉnh sửa các cài đặt này.", "advancedOptions": "Tùy chọn nâng cao"
     },

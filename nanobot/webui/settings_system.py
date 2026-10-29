@@ -516,6 +516,8 @@ class SystemSettingsHandler:
                     values,
                     local_browser=request.local_browser,
                 )
+                if "agents.defaults.subagent_model_preset" in values and self.settings.refresh_runtime_config is not None:
+                    self.settings.refresh_runtime_config()
             except WebUISettingsError as exc:
                 return SettingsRouteResult.failure(exc.status, exc.message)
             return SettingsRouteResult.success(

@@ -493,6 +493,10 @@
         "gateway_heartbeat_enabled": {"label": "Verificação periódica", "help": "Verifique as tarefas de HEARTBEAT.md periodicamente.\n\nVerifica periodicamente as tarefas em HEARTBEAT.md."},
         "gateway_heartbeat_interval_s": {"label": "Intervalo de verificação", "help": "Segundos entre verificações do heartbeat.\n\nO gateway agenda as verificações ao iniciar."},
         "agents_defaults_max_tool_iterations": {"label": "Rodadas de ferramentas", "help": "Máximo de rodadas de ferramentas por resposta.\n\nNúmero máximo de interações entre o modelo e as ferramentas em um turno."},
+        "agents_defaults_subagent_model_preset": {
+          "label": "Modelo dos subagentes",
+          "help": "Modelo padrão para novas tarefas de subagentes.\n\nAs alterações se aplicam imediatamente às novas tarefas. As tarefas já criadas mantêm seu modelo. O modelo principal segue a conversa atual."
+        },
         "agents_defaults_max_concurrent_subagents": {"label": "Subagentes simultâneos", "help": "Máximo de subagentes em execução ao mesmo tempo.\n\nNúmero máximo de subagentes executados ao mesmo tempo."},
         "agents_defaults_max_tool_result_chars": {"label": "Tamanho do resultado", "help": "Limite de caracteres por resultado de ferramenta enviado ao modelo.\n\nLimita a saída das ferramentas incluída no contexto do modelo."},
         "agents_defaults_provider_retry_mode": {"label": "Continuar tentando", "help": "Tente novamente após erros recuperáveis; desative para tentativas padrão.\n\nTenta novamente quando uma solicitação ao modelo falha por um erro temporário. Desative para limitar o número de tentativas."},
@@ -560,7 +564,7 @@
         "minutes": "minutos",
         "numberError": "Digite um número inteiro de minutos maior ou igual a zero."
       },
-      "numberError": "Digite um número válido dentro do intervalo permitido.", "activeModel": "Usar o modelo ativo", "none": "Nenhum",
+      "numberError": "Digite um número válido dentro do intervalo permitido.", "parentModel": "Modelo principal", "activeModel": "Usar o modelo ativo", "none": "Nenhum",
       "auto": "Automático", "manual": "Manual", "standard": "Padrão", "persistent": "Contínuo",
       "unavailable": "Atualize o gateway para editar estas configurações.", "advancedOptions": "Opções avançadas"
     },

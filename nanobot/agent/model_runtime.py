@@ -87,6 +87,8 @@ class ModelRuntimeResolver:
         configured_default_preset: str | None = None,
         provider_snapshot_loader: Callable[[], ProviderSnapshot] | None = None,
         preset_snapshot_loader: preset_helpers.PresetSnapshotLoader | None = None,
+        subagent_model_preset: str | None = None,
+        subagent_model_preset_loader: Callable[[], str | None] | None = None,
     ) -> None:
         self._runtime = initial_runtime
         self._providers: set[LLMProvider] = {initial_runtime.provider}
@@ -95,6 +97,8 @@ class ModelRuntimeResolver:
         self._preset_catalog_refresh_required = False
         self._provider_snapshot_loader = provider_snapshot_loader
         self._preset_snapshot_loader = preset_snapshot_loader
+        self._subagent_model_preset = subagent_model_preset
+        self._subagent_model_preset_loader = subagent_model_preset_loader
         self._refresh_required = False
         self._resolved_presets: dict[str, LLMRuntime] = {}
         self._recent_override: _RecentOverride | None = None
@@ -120,6 +124,13 @@ class ModelRuntimeResolver:
     @property
     def model_preset(self) -> str | None:
         return self._runtime.model_preset
+
+    @property
+    def subagent_model_preset(self) -> str | None:
+        """Use the latest configured default without changing admitted tasks."""
+        if self._subagent_model_preset_loader is not None:
+            return self._subagent_model_preset_loader()
+        return self._subagent_model_preset
 
     @property
     def provider_signature(self) -> tuple[object, ...] | None:

@@ -482,10 +482,15 @@ def update_runtime_config_settings(
     values: dict[str, Any], *, local_browser: bool = False, config_path: Path | None = None,
 ) -> dict[str, Any]:
     config = _load_settings_config(config_path)
+    before = runtime.runtime_config_payload(config)
     changed = runtime.update_runtime_config(config, values, local_browser=local_browser)
     if changed:
         _save_settings_config(config, config_path)
     return settings_payload(
-        requires_restart=changed,
+        requires_restart=any(
+            value != before[path]
+            for path, value in runtime.runtime_config_payload(config).items()
+            if path != "agents.defaults.subagent_model_preset"
+        ),
         config_path=config_path,
     )

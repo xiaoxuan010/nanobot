@@ -493,6 +493,10 @@
         "gateway_heartbeat_enabled": {"label": "定期チェック", "help": "HEARTBEAT.md のタスクを定期的に確認します。"},
         "gateway_heartbeat_interval_s": {"label": "確認間隔", "help": "ハートビートの確認間隔（秒）です。\n\nゲートウェイの起動時に定期チェックを予約します。"},
         "agents_defaults_max_tool_iterations": {"label": "ツールの回数", "help": "返信ごとのツール実行回数の上限です。\n\n1 ターンでモデルとツールがやり取りする回数の上限です。"},
+        "agents_defaults_subagent_model_preset": {
+          "label": "サブエージェントのモデル",
+          "help": "新しいサブエージェントタスクの既定モデル。\n\n変更は新規タスクにすぐ反映されます。作成済みのタスクは元のモデルを使い続けます。親モデルは現在の会話に従います。"
+        },
         "agents_defaults_max_concurrent_subagents": {"label": "同時サブエージェント", "help": "同時に実行するサブエージェントの上限です。\n\n同時に実行するサブエージェントの最大数です。"},
         "agents_defaults_max_tool_result_chars": {"label": "結果の長さ", "help": "モデルに渡すツール結果ごとの文字数上限です。\n\nモデルのコンテキストに含めるツール出力を制限します。"},
         "agents_defaults_provider_retry_mode": {"label": "再試行を継続", "help": "回復可能なエラーで再試行します。オフでは標準の再試行を使います。\n\nモデルへのリクエストが一時的なエラーで失敗した場合、成功するまで再試行します。オフにすると再試行回数を制限します。"},
@@ -560,7 +564,7 @@
         "minutes": "分",
         "numberError": "分数を0以上の整数で入力してください。"
       },
-      "numberError": "許可された範囲内の有効な数値を入力してください。", "activeModel": "現在のモデルを使用", "none": "なし",
+      "numberError": "許可された範囲内の有効な数値を入力してください。", "parentModel": "親モデル", "activeModel": "現在のモデルを使用", "none": "なし",
       "auto": "自動", "manual": "手動", "standard": "標準", "persistent": "継続",
       "unavailable": "これらの設定を編集するにはゲートウェイを更新してください。", "advancedOptions": "詳細オプション"
     },

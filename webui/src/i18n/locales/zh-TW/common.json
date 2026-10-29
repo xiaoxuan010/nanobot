@@ -493,6 +493,10 @@
         "gateway_heartbeat_enabled": {"label": "定期檢查", "help": "定期檢查 HEARTBEAT.md 任務\n\n定期檢查 HEARTBEAT.md 中的任務。"},
         "gateway_heartbeat_interval_s": {"label": "檢查間隔", "help": "心跳任務的檢查間隔，單位秒"},
         "agents_defaults_max_tool_iterations": {"label": "互動上限", "help": "每次回覆最多與工具互動多少輪\n\n每次回覆中，模型與工具最多可以互動多少輪。"},
+        "agents_defaults_subagent_model_preset": {
+          "label": "子代理模型",
+          "help": "新建子代理預設使用的模型\n\n儲存後立即用於新任務，已建立任務保留原模型。主代理模型跟隨目前對話。"
+        },
         "agents_defaults_max_concurrent_subagents": {"label": "併發上限", "help": "同時執行任務的子智慧體數量上限"},
         "agents_defaults_max_tool_result_chars": {"label": "結果長度", "help": "每條工具結果傳給模型的字元上限\n\n限制每條工具結果傳入模型的長度，按字元計數。"},
         "agents_defaults_provider_retry_mode": {"label": "持續重試", "help": "可恢復錯誤持續重試；關閉用標準策略\n\n遇到可恢復的請求錯誤時持續重試。關閉後使用標準重試策略。"},
@@ -560,7 +564,7 @@
         "minutes": "分鐘",
         "numberError": "請輸入非負整數分鐘數。"
       },
-      "numberError": "請輸入允許範圍內的有效數字。", "activeModel": "使用目前模型", "none": "無",
+      "numberError": "請輸入允許範圍內的有效數字。", "parentModel": "主代理模型", "activeModel": "使用目前模型", "none": "無",
       "auto": "自動", "manual": "手動", "standard": "標準", "persistent": "持續",
       "unavailable": "更新閘道後可編輯這些設定。", "advancedOptions": "進階選項"
     },

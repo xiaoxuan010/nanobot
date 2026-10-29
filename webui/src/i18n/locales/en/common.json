@@ -511,6 +511,10 @@
           "label": "Tool rounds",
           "help": "Maximum tool rounds per reply.\n\nMaximum number of model and tool rounds for each reply."
         },
+        "agents_defaults_subagent_model_preset": {
+          "label": "Subagent model",
+          "help": "Default model for new subagent tasks.\n\nChanges apply immediately to new tasks. Tasks already created keep their model. The parent model follows the current conversation."
+        },
         "agents_defaults_max_concurrent_subagents": {
           "label": "Concurrent subagents",
           "help": "Maximum subagents running at once.\n\nMaximum number of subagents running at the same time."
@@ -747,6 +751,7 @@
         "numberError": "Enter a non-negative whole number of minutes."
       },
       "numberError": "Enter a valid number within the allowed range.",
+      "parentModel": "Parent model",
       "activeModel": "Use active model",
       "none": "None",
       "auto": "Automatic",

@@ -493,6 +493,10 @@
         "gateway_heartbeat_enabled": {"label": "Comprobación periódica", "help": "Revisa periódicamente las tareas de HEARTBEAT.md.\n\nBusca tareas periódicamente en HEARTBEAT.md."},
         "gateway_heartbeat_interval_s": {"label": "Intervalo de revisión", "help": "Segundos entre revisiones del heartbeat.\n\nLa gateway programa las comprobaciones al iniciarse."},
         "agents_defaults_max_tool_iterations": {"label": "Rondas de herramientas", "help": "Máximo de rondas de herramientas por respuesta.\n\nMáximo de intercambios entre el modelo y las herramientas en un turno."},
+        "agents_defaults_subagent_model_preset": {
+          "label": "Modelo de subagentes",
+          "help": "Modelo predeterminado para nuevas tareas de subagentes.\n\nLos cambios se aplican de inmediato a las nuevas tareas. Las tareas ya creadas conservan su modelo. El modelo principal sigue la conversación actual."
+        },
         "agents_defaults_max_concurrent_subagents": {"label": "Subagentes simultáneos", "help": "Máximo de subagentes ejecutándose a la vez.\n\nMáximo de subagentes que pueden ejecutarse a la vez."},
         "agents_defaults_max_tool_result_chars": {"label": "Longitud del resultado", "help": "Límite de caracteres por resultado de herramienta enviado al modelo.\n\nLimita la salida de las herramientas incluida en el contexto del modelo."},
         "agents_defaults_provider_retry_mode": {"label": "Seguir reintentando", "help": "Reintenta errores recuperables; desactívalo para usar reintentos estándar.\n\nVuelve a intentar las solicitudes al modelo tras un error temporal. Desactiva esta opción para limitar el número de reintentos."},
@@ -560,7 +564,7 @@
         "minutes": "minutos",
         "numberError": "Introduce un número entero de minutos mayor o igual que cero."
       },
-      "numberError": "Introduce un número válido dentro del rango permitido.", "activeModel": "Usar el modelo activo", "none": "Ninguno",
+      "numberError": "Introduce un número válido dentro del rango permitido.", "parentModel": "Modelo principal", "activeModel": "Usar el modelo activo", "none": "Ninguno",
       "auto": "Automático", "manual": "Manual", "standard": "Estándar", "persistent": "Continuo",
       "unavailable": "Actualiza la pasarela para editar estos ajustes.", "advancedOptions": "Opciones avanzadas"
     },

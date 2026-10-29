@@ -313,6 +313,8 @@ class AgentLoop:
         preset_catalog_loader: preset_helpers.PresetCatalogLoader | None = None,
         model_preset: str | None = None,
         dream_model_preset: str | None = None,
+        subagent_model_preset: str | None = None,
+        subagent_model_preset_loader: Callable[[], str | None] | None = None,
         preset_snapshot_loader: preset_helpers.PresetSnapshotLoader | None = None,
         turn_delivery_factory: TurnDeliveryFactory | None = None,
         runtime_model_publisher: Callable[[str, str | None], None] | None = None,
@@ -361,6 +363,8 @@ class AgentLoop:
             configured_default_preset=model_preset,
             provider_snapshot_loader=provider_snapshot_loader,
             preset_snapshot_loader=preset_snapshot_loader,
+            subagent_model_preset=subagent_model_preset,
+            subagent_model_preset_loader=subagent_model_preset_loader,
         )
         self.dream_model_preset = dream_model_preset
         self.max_tool_result_chars = (
@@ -535,6 +539,7 @@ class AgentLoop:
             model_presets=preset_helpers.configured_model_presets(config),
             model_preset=defaults.model_preset,
             dream_model_preset=defaults.dream.model_override,
+            subagent_model_preset=defaults.subagent_model_preset,
             restart_mode=config.gateway.restart_mode,
             provider_snapshot_loader=provider_snapshot_loader,
             preset_snapshot_loader=preset_snapshot_loader,
@@ -692,6 +697,7 @@ class AgentLoop:
             timezone=self.context.timezone or "UTC",
             workspace_sandbox=self.workspace_scopes.sandbox_status,
             runtime_control=runtime_control,
+            model_runtime_resolver=self.runtime_resolver,
         )
         loader = ToolLoader()
         registered = loader.load(ctx, self.tools)

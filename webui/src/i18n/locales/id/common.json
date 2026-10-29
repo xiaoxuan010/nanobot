@@ -493,6 +493,10 @@
         "gateway_heartbeat_enabled": {"label": "Pemeriksaan berkala", "help": "Periksa tugas di HEARTBEAT.md secara berkala.\n\nMemeriksa tugas di HEARTBEAT.md secara berkala."},
         "gateway_heartbeat_interval_s": {"label": "Interval pemeriksaan", "help": "Jeda pemeriksaan heartbeat dalam detik.\n\nGateway menjadwalkan pemeriksaan berkala saat dimulai."},
         "agents_defaults_max_tool_iterations": {"label": "Putaran alat", "help": "Batas putaran alat untuk tiap balasan.\n\nJumlah maksimum interaksi model dan alat dalam satu giliran."},
+        "agents_defaults_subagent_model_preset": {
+          "label": "Model subagen",
+          "help": "Model bawaan untuk tugas subagen baru.\n\nPerubahan langsung berlaku untuk tugas baru. Tugas yang sudah dibuat tetap menggunakan model semula. Model induk mengikuti percakapan saat ini."
+        },
         "agents_defaults_max_concurrent_subagents": {"label": "Subagen bersamaan", "help": "Batas subagen yang berjalan bersamaan.\n\nJumlah maksimum subagen yang berjalan bersamaan."},
         "agents_defaults_max_tool_result_chars": {"label": "Panjang hasil", "help": "Batas karakter tiap hasil alat yang dikirim ke model.\n\nMembatasi keluaran alat yang disertakan dalam konteks model."},
         "agents_defaults_provider_retry_mode": {"label": "Terus mencoba", "help": "Ulangi setelah kesalahan yang dapat dipulihkan; nonaktifkan untuk percobaan standar.\n\nMencoba kembali permintaan ke model saat terjadi kesalahan sementara. Nonaktifkan untuk membatasi jumlah percobaan ulang."},
@@ -560,7 +564,7 @@
         "minutes": "menit",
         "numberError": "Masukkan jumlah menit berupa bilangan bulat nol atau lebih."
       },
-      "numberError": "Masukkan angka yang valid dalam rentang yang diizinkan.", "activeModel": "Gunakan model aktif", "none": "Tidak ada",
+      "numberError": "Masukkan angka yang valid dalam rentang yang diizinkan.", "parentModel": "Model induk", "activeModel": "Gunakan model aktif", "none": "Tidak ada",
       "auto": "Otomatis", "manual": "Manual", "standard": "Standar", "persistent": "Terus-menerus",
       "unavailable": "Perbarui gateway untuk mengedit pengaturan ini.", "advancedOptions": "Opsi lanjutan"
     },

@@ -404,7 +404,10 @@ class WebUISettingsRouter:
     def _restart_values(self, action: str) -> dict[str, Any]:
         config = self.settings.config.load()
         if action == "runtime-config-update":
-            return runtime_config_payload(config)
+            return {
+                path: value for path, value in runtime_config_payload(config).items()
+                if path != "agents.defaults.subagent_model_preset"
+            }
         if action == "image-update":
             return config.tools.image_generation.model_dump(mode="json")
         return {"use_jina_reader": config.tools.web.fetch.use_jina_reader}
