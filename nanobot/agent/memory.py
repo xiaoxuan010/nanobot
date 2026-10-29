@@ -13,6 +13,7 @@ import re
 import threading
 import weakref
 from contextlib import suppress
+from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Iterator, cast
@@ -873,8 +874,9 @@ class MemoryArchiver:
                 return raw_fallback()
             call_tools = []
         else:
+            # Image retries may mutate nested content; keep the source transcript intact.
             request_messages = [
-                *[dict(message) for message in history],
+                *deepcopy(history),
                 prompt_message,
             ]
         if input_token_budget is not None and provider_context is None:
