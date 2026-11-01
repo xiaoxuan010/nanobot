@@ -12,8 +12,76 @@ from nanobot.agent.tools.context import RequestContext, request_context
 from nanobot.agent.tools.registry import ToolRegistry
 from nanobot.audio.transcription import EffectiveTranscriptionConfig
 from nanobot.bus.events import InboundMessage
+from nanobot.channels.napcat import runtime as napcat_runtime
 from nanobot.channels.napcat.group_agent import OBSERVATION_KEY, GroupMessage
 from nanobot.channels.napcat.tests.test_group_agent import channel, message
+
+
+@pytest.mark.asyncio
+async def test_group_message_title_comes_from_member_info_and_is_cached_by_member():
+    ch = channel()
+    ch._call_action = AsyncMock(return_value={
+        "data": {"nickname": "7", "role": "member", "title": "队长"},
+    })
+    try:
+        first = await ch._enrich_group_message(
+            GroupMessage.parse(message(1, sender={"nickname": "7", "role": "member"}))
+        )
+        second = await ch._enrich_group_message(
+            GroupMessage.parse(message(2, sender={"nickname": "7", "role": "member"}))
+        )
+        assert (first.role, first.title) == ("member", "队长")
+        assert (second.role, second.title) == ("member", "队长")
+        ch._call_action.assert_awaited_once_with(
+            "get_group_member_info", {"group_id": 100, "user_id": 7, "no_cache": True},
+        )
+    finally:
+        await ch.stop()
+
+
+@pytest.mark.asyncio
+async def test_failed_group_member_info_lookup_is_not_cached():
+    ch = channel()
+    ch._call_action = AsyncMock(side_effect=[
+        RuntimeError("temporary failure"),
+        {"data": {"nickname": "7", "role": "member", "title": "队长"}},
+    ])
+    try:
+        first = await ch._enrich_group_message(
+            GroupMessage.parse(message(1, sender={"nickname": "7", "role": "member"}))
+        )
+        second = await ch._enrich_group_message(
+            GroupMessage.parse(message(2, sender={"nickname": "7", "role": "member"}))
+        )
+        assert first.title == ""
+        assert second.title == "队长"
+        assert ch._call_action.await_count == 2
+    finally:
+        await ch.stop()
+
+
+@pytest.mark.asyncio
+async def test_group_member_info_cache_expires(monkeypatch):
+    now = [0.0]
+    monkeypatch.setattr(napcat_runtime.time, "monotonic", lambda: now[0])
+    ch = channel()
+    ch._call_action = AsyncMock(side_effect=[
+        {"data": {"nickname": "7", "role": "member", "title": "旧头衔"}},
+        {"data": {"nickname": "7", "role": "member", "title": "新头衔"}},
+    ])
+    try:
+        first = await ch._enrich_group_message(
+            GroupMessage.parse(message(1, sender={"nickname": "7", "role": "member"}))
+        )
+        now[0] = 301.0
+        second = await ch._enrich_group_message(
+            GroupMessage.parse(message(2, sender={"nickname": "7", "role": "member"}))
+        )
+        assert first.title == "旧头衔"
+        assert second.title == "新头衔"
+        assert ch._call_action.await_count == 2
+    finally:
+        await ch.stop()
 
 
 @pytest.mark.asyncio

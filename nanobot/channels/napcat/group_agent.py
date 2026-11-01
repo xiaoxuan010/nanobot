@@ -40,6 +40,8 @@ class GroupMessage:
     group_name: str = ""
     targetable: bool = True
     received_at_ns: int = field(default_factory=time.time_ns)
+    role: str = ""
+    title: str = ""
 
     @classmethod
     def parse(cls, raw: dict[str, Any], media: tuple[str, ...] = ()) -> GroupMessage:
@@ -59,12 +61,15 @@ class GroupMessage:
             int(raw.get("time") or 0), str(sender.get("card") or sender.get("nickname") or ""),
             segments, media, str(raw.get("real_seq") or ""),
             str(raw.get("group_name") or ""), raw.get("targetable", True) is True,
+            role=str(sender.get("role") or ""), title=str(sender.get("title") or ""),
         )
 
     def wire(self) -> dict[str, Any]:
         return {
             "message_id": self.message_id, "group_id": self.group_id, "user_id": self.sender_id,
-            "time": self.timestamp, "sender": {"nickname": self.name}, "message": self.segments,
+            "time": self.timestamp,
+            "sender": {"nickname": self.name, "role": self.role, "title": self.title},
+            "message": self.segments,
             "real_seq": self.real_seq,
             "group_name": self.group_name, "targetable": self.targetable,
         }

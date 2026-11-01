@@ -72,7 +72,7 @@ def render_group_messages(messages: Sequence[GroupMessage]) -> str:
     name = f" {_inline(messages[0].group_name)}" if messages[0].group_name else ""
     lines = [f"QQ group {_inline(messages[0].group_id)}{name}"]
     previous_minute: datetime | None = None
-    previous_sender: tuple[str, str] | None = None
+    previous_sender: tuple[str, str, str, str] | None = None
     for message in sorted(messages, key=lambda item: item.timestamp):
         minute = datetime.fromtimestamp(message.timestamp, BEIJING_TIMEZONE).replace(second=0, microsecond=0)
         if previous_minute is None or minute.date() != previous_minute.date():
@@ -82,9 +82,9 @@ def render_group_messages(messages: Sequence[GroupMessage]) -> str:
             time_prefix = f"[{minute:%H:%M}] "
         else:
             time_prefix = ""
-        sender = (message.sender_id, message.name)
+        sender = (message.sender_id, message.name, message.role, message.title)
         sender_prefix = (
-            f"({_inline(message.sender_id)}){_inline(message.name)} "
+            f"({_inline(message.sender_id)}){_inline(message.name)}{_sender_title(message)} "
             if sender != previous_sender else ""
         )
         body = "".join(_segment(segment) for segment in message.segments)
@@ -92,3 +92,13 @@ def render_group_messages(messages: Sequence[GroupMessage]) -> str:
         lines.append(f"{time_prefix}{sender_prefix}{identity}: {body}")
         previous_minute, previous_sender = minute, sender
     return "\n".join(lines)
+
+
+def _sender_title(message: GroupMessage) -> str:
+    if message.role == "owner":
+        return " [群主]"
+    if message.role == "admin":
+        return " [管理员]"
+    if message.title:
+        return f" [头衔:{_inline(message.title)}]"
+    return ""

@@ -49,6 +49,7 @@ from nanobot.utils.helpers import safe_filename
 
 _DOWNLOAD_TIMEOUT = aiohttp.ClientTimeout(total=60)
 _ACTION_TIMEOUT = 20.0
+_GROUP_MEMBER_INFO_CACHE_TTL = 300.0
 
 
 # `"mention"` (only @mentions / replies) | `"open"` (every message) | float p
@@ -101,6 +102,9 @@ class NapcatChannel(BaseChannel):
         self._background_tasks: set[asyncio.Task[None]] = set()
         self._group_names: dict[str, str] = {}
         self._member_names: dict[tuple[str, str], str] = {}
+        self._group_member_info: dict[
+            tuple[str, str], tuple[float, tuple[str, str, str]],
+        ] = {}
         self.group_observer = GroupObserver(
             self.config.group_agent, self.name, self.bus.publish_inbound, self._prepare_group_message,
         )
@@ -490,17 +494,35 @@ class NapcatChannel(BaseChannel):
 
     async def _lookup_member_name(self, group_id: int, user_id: int) -> str:
         """Lookup group member nickname. Fallback to user id."""
+        return (await self._member_info(str(group_id), str(user_id)))[0]
+
+    async def _member_info(self, group: str, user: str) -> tuple[str, str, str]:
+        key = (group, user)
+        cached = self._group_member_info.get(key)
+        if cached is not None:
+            expires_at, info = cached
+            if time.monotonic() < expires_at:
+                return info
+            del self._group_member_info[key]
         try:
             resp = await self._call_action(
                 "get_group_member_info",
-                {"group_id": group_id, "user_id": user_id, "no_cache": True},
+                {"group_id": int(group), "user_id": int(user), "no_cache": True},
             )
-            data = resp.get("data", {})
-            # logger.debug("get_group_member_info: {}", resp)
-            return data.get("card") or data.get("nickname") or str(user_id)
+            data_value = resp.get("data")
+            if not isinstance(data_value, dict):
+                raise ValueError("NapCat returned no group member info")
+            data = cast(dict[str, Any], data_value)
+            info = (
+                str(data.get("card") or data.get("nickname") or user),
+                str(data.get("role") or ""),
+                str(data.get("title") or ""),
+            )
         except Exception as e:
             logger.warning("napcat: get_group_member_info failed: {}", e)
-            return str(user_id)
+            return user, "", ""
+        self._group_member_info[key] = (time.monotonic() + _GROUP_MEMBER_INFO_CACHE_TTL, info)
+        return info
 
     # ------------------------------------------------------------------
     # Outbound
@@ -622,7 +644,9 @@ class NapcatChannel(BaseChannel):
                         self._group_names[group] = str(group_data["group_name"])
             except (RuntimeError, TimeoutError, OSError) as error:
                 logger.debug("Could not retrieve group name: {}", error)
-        name = message.name or await self._member_name(group, message.sender_id)
+        member_name, member_role, member_title = await self._member_info(group, message.sender_id)
+        name = message.name or member_name
+        self._member_names[(group, message.sender_id)] = name
         segments = deepcopy(message.segments)
         for segment in segments:
             data = segment.get("data")
@@ -651,7 +675,10 @@ class NapcatChannel(BaseChannel):
                         })
                 except (ValueError, RuntimeError, TimeoutError, OSError) as error:
                     logger.debug("Could not enrich reply context: {}", error)
-        return replace(message, name=name, group_name=self._group_names.get(group, ""), segments=segments)
+        return replace(
+            message, name=name, group_name=self._group_names.get(group, ""), segments=segments,
+            role=message.role or member_role, title=message.title or member_title,
+        )
 
     async def _member_name(self, group: str, user: str) -> str:
         key = (group, user)

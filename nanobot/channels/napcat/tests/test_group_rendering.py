@@ -77,3 +77,44 @@ def test_repeated_prefixes_are_scoped_to_each_block_and_dates_remain_explicit():
     # A query or steer block can start with a sender and minute already seen
     # in another block; it still has to provide its own complete context.
     assert render_group_messages(messages[1:2]) == "QQ group 100\n[2023/11/15 06:13] (7)Alice #2: continued"
+
+
+def test_group_roles_and_member_titles_are_rendered():
+    def message(message_id, user_id, nickname, role, title=""):
+        return GroupMessage(
+            message_id, "100", user_id, 1700000000, nickname,
+            [{"type": "text", "data": {"text": "hello"}}], role=role, title=title,
+        )
+
+    messages = [
+        message("1", "7", "Owner", "owner"),
+        message("2", "8", "Admin", "admin"),
+        message("3", "9", "Member", "member", "队长"),
+        message("4", "10", "Plain", "member"),
+    ]
+    assert render_group_messages(messages).splitlines() == [
+        "QQ group 100",
+        "[2023/11/15 06:13] (7)Owner [群主] #1: hello",
+        "(8)Admin [管理员] #2: hello",
+        "(9)Member [头衔:队长] #3: hello",
+        "(10)Plain #4: hello",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_observation_round_trip_preserves_group_role_and_title():
+    message = GroupMessage(
+        "1", "100", "7", 1700000000, "Alice",
+        [{"type": "text", "data": {"text": "hello"}}], role="member", title="队长",
+    )
+    bus = MessageBus()
+    observer = GroupObserver(GroupAgentConfig(), "napcat", bus.publish_inbound)
+    try:
+        observer.observe(message, own=False)
+        await observer.flush("100")
+        batch = await bus.consume_inbound()
+        wire = batch.metadata[OBSERVATION_KEY][0]
+        restored = GroupMessage.parse(wire)
+        assert (restored.role, restored.title) == ("member", "队长")
+    finally:
+        await observer.close()

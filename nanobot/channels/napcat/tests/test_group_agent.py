@@ -132,7 +132,9 @@ async def test_history_reports_actual_scan_and_rejects_other_groups(tmp_path):
     ch = channel()
     page = [message(3, text="find this"), message(2, text="other")]
     ch._call_action = AsyncMock(side_effect=[
-        {"data": {"messages": page}}, {"data": {"messages": page}},
+        {"data": {"messages": page}},
+        {"data": {"nickname": "7", "role": "member", "title": ""}},
+        {"data": {"messages": page}},
         {"data": {"message_id": 88}},
         {"data": message(9, group_id=200)},
     ])
@@ -162,6 +164,7 @@ async def test_queries_render_lines_and_keep_targets_available_for_reply(tmp_pat
     record = message(9, text="earlier question")
     ch._call_action = AsyncMock(side_effect=[
         {"data": record if tool == "get_message" else {"messages": [record]}},
+        {"data": {"nickname": "7", "role": "member", "title": ""}},
         {"data": {"message_id": 88}},
     ])
     policy = ch.turn_policy(InboundMessage("napcat", "7", "group:100", ""), "napcat:group:100", ToolRegistry())
@@ -220,7 +223,9 @@ async def test_runtime_steer_updates_reply_targets_and_avoids_final_roundtrip(tm
         assert send.args[1]["message"][0] == {"type": "reply", "data": {"id": "2"}}
         while not ch.bus.outbound.empty():
             await ch.send(await ch.bus.consume_outbound())
-        assert ch._call_action.await_count == 2
+        assert [call.args[0] for call in ch._call_action.call_args_list] == [
+            "get_group_member_info", "set_msg_emoji_like", "send_msg",
+        ]
     finally:
         await ch.stop()
         await loop.aclose()
@@ -301,9 +306,8 @@ async def test_real_websocket_observation_action_ack_and_self_echo(tmp_path):
             batch = await asyncio.wait_for(ch.bus.consume_inbound(), 3)
             response = await asyncio.wait_for(loop._process_message(batch), 5)
             assert response is None
-            assert len(requests) == 1
-            assert requests[0]["action"] == "send_msg"
-            assert requests[0]["params"]["message"] == [{"type": "text", "data": {"text": "visible answer"}}]
+            assert [request["action"] for request in requests] == ["get_group_member_info", "send_msg"]
+            assert requests[1]["params"]["message"] == [{"type": "text", "data": {"text": "visible answer"}}]
             assert provider.chat_stream_with_retry.await_count == 1
             await asyncio.sleep(0)
             assert ch.bus.inbound_size == 0
@@ -346,6 +350,7 @@ async def test_unknown_delivery_and_partial_query_are_errors(tmp_path):
     ch._call_action = AsyncMock(side_effect=[
         TimeoutError("no acknowledgement"),
         {"data": {"messages": [message(3, text="match"), message(2)]}},
+        {"data": {"nickname": "7", "role": "member", "title": ""}},
         TimeoutError("history disconnected"),
     ])
     policy = ch.turn_policy(InboundMessage("napcat", "7", "group:100", ""), "napcat:group:100", ToolRegistry())
@@ -359,7 +364,7 @@ async def test_unknown_delivery_and_partial_query_are_errors(tmp_path):
         parsed = json.JSONDecoder().raw_decode(history)[0]
         assert parsed["scanned_count"] == 2
         assert parsed["stop_reason"] == "source_error"
-    assert ch._call_action.await_count == 3
+    assert ch._call_action.await_count == 4
     await ch.stop()
 
 
@@ -440,6 +445,8 @@ async def test_mature_batch_does_not_duplicate_self_event_while_receipt_is_pendi
     entered, receipt = asyncio.Event(), asyncio.Event()
 
     async def send(action, params):
+        if action == "get_group_member_info":
+            return {"data": {"nickname": "7", "role": "member", "title": ""}}
         await ch._on_message(message(88, user=42, post_type="message_sent"))
         entered.set()
         await receipt.wait()
