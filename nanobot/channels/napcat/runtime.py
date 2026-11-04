@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import json
 import os
 import random
@@ -874,7 +875,9 @@ class NapcatChannel(BaseChannel):
 
         filename_hint = info.get("file")
         if filename_hint:
-            name = safe_filename(filename_hint)
+            original = safe_filename(filename_hint)
+            digest = hashlib.blake2b(original.encode("utf-8"), digest_size=8).digest()
+            name = base64.b32encode(digest).decode("ascii")[:10].lower() + Path(original).suffix
         else:
             name = f"{int(time.time() * 1000)}.jpg"
         path = self._media_root / name

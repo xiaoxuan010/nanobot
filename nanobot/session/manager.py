@@ -27,6 +27,7 @@ from nanobot.utils.helpers import (
     estimate_message_tokens,
     find_legal_message_start,
     recent_message_start_index,
+    shorten_image_references,
     strip_think,
 )
 from nanobot.utils.subagent_channel_display import scrub_subagent_announce_body
@@ -276,6 +277,17 @@ class Session:
                 content,
                 message.get("media"),
             )
+            if self.key.startswith("napcat:") and isinstance(content, str):
+                content = shorten_image_references(content)
+            elif self.key.startswith("napcat:") and isinstance(content, list):
+                blocks: list[object] = []
+                for block in cast(list[object], content):
+                    if isinstance(block, dict):
+                        data = cast(dict[str, Any], block)
+                        if data.get("type") == "text":
+                            block = {**data, "text": shorten_image_references(data["text"])}
+                    blocks.append(cast(object, block))
+                content = blocks
             cli_apps = cast(object, message.get("cli_apps"))
             if (
                 include_runtime_context

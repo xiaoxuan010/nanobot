@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import json
 from collections import defaultdict
 from itertools import groupby
 from typing import Any, cast
 
 from nanobot.channels.napcat.group_agent import GroupMessage
-from nanobot.channels.napcat.group_rendering import render_group_messages
+from nanobot.channels.napcat.group_rendering import inline_text, render_group_messages, sender_title
 from nanobot.runtime_context import RUNTIME_CONTEXT_MESSAGE_META
 from nanobot.utils.helpers import (
     content_with_media_breadcrumbs,
@@ -107,8 +108,78 @@ def prepare_group_context(messages: list[dict[str, Any]]) -> list[dict[str, Any]
             destination.append(_fragment(
                 message, part, original_text, last=part[-1] is records[-1],
             ))
-    return [
+    ordered = [
         message
         for index in range(len(messages))
         for message in [*before[index], *kept[index]]
     ]
+    return _shorten_senders(ordered)
+
+
+def _shorten_senders(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    seen: dict[tuple[str, str], tuple[str, str, str, str]] = {}
+    names: dict[str, list[tuple[str, str]]] = defaultdict(list)
+    result: list[dict[str, Any]] = []
+    for entry in messages:
+        metadata = entry.get("context_metadata", {})
+        is_tool = entry.get("role") == "tool" and "napcat_query_observation" in metadata
+        records = metadata.get("napcat_query_observation" if is_tool else "napcat_observation")
+        if not records or (entry.get("role") != "user" and not is_tool):
+            result.append(entry)
+            continue
+        content = entry["content"]
+        payload: dict[str, Any] = {}
+        field = ""
+        if is_tool:
+            try:
+                payload = json.loads(content)
+            except json.JSONDecodeError:
+                # Tool results may be truncated by the context budget.
+                result.append(entry)
+                continue
+            field = "message" if "message" in payload else "messages"
+            text = payload[field]
+        else:
+            text = content if isinstance(content, str) else next(
+                block["text"] for block in content
+                if block.get("type") == "text" and block["text"].startswith("QQ group ")
+            )
+        lines = text.split("\n", len(records) + 1)
+        for index, record in enumerate(records, 1):
+            message = GroupMessage.parse(record)
+            key = (message.group_id, message.sender_id)
+            previous = seen.get(key)
+            if previous is None or previous[0] != message.name:
+                other_names = [name for sender, name in names[message.group_id] if sender != message.sender_id]
+                length = min(3, len(message.name))
+                while length < len(message.name) and any(name.startswith(message.name[:length]) for name in other_names):
+                    length += 1
+                alias = inline_text(message.name[:length]) + "…"
+                if any(name.startswith(message.name[:length]) for name in other_names):
+                    alias = f"({inline_text(message.sender_id)})" + alias
+                names[message.group_id].append((message.sender_id, message.name))
+                sender = f"({inline_text(message.sender_id)}){inline_text(message.name)}{sender_title(message)}"
+            else:
+                alias = previous[1]
+                sender = alias
+                if (message.role, message.title) != (previous[2], previous[3]):
+                    sender += sender_title(message)
+            seen[key] = (message.name, alias, message.role, message.title)
+            line = lines[index]
+            timestamp = line[:line.index("] ") + 2] if line.startswith("[") else ""
+            identity = f"#{inline_text(message.message_id)}: " if message.targetable else "event: "
+            start = line.index(identity, len(timestamp))
+            lines[index] = timestamp + sender + " " + line[start:]
+        updated = "\n".join(lines)
+        if is_tool:
+            payload[field] = updated
+            content = json.dumps(payload, ensure_ascii=False)
+        elif isinstance(content, str):
+            content = updated
+        else:
+            content = [
+                {**block, "text": updated} if block.get("type") == "text" and block.get("text") == text else block
+                for block in content
+            ]
+        result.append({**entry, "content": content})
+    return result

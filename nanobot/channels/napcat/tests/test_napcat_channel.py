@@ -1,4 +1,5 @@
 import asyncio
+import re
 from pathlib import Path
 
 import pytest
@@ -215,9 +216,15 @@ async def test_message_with_unparsable_image_size_still_routes(tmp_path, monkeyp
 
     msg = await channel.bus.consume_inbound()
     assert msg.content == "look at this"
-    expected = [str(tmp_path / "a.png")] if max_bytes >= len(b"png-bytes") else []
-    assert msg.media == expected
-    assert sorted(str(path) for path in tmp_path.iterdir()) == expected
+    if max_bytes >= len(b"png-bytes"):
+        assert len(msg.media) == 1
+        path = Path(msg.media[0])
+        assert re.fullmatch(r"[a-z2-7]{10}\.png", path.name)
+        assert path.read_bytes() == b"png-bytes"
+        assert list(tmp_path.iterdir()) == [path]
+    else:
+        assert not msg.media
+        assert list(tmp_path.iterdir()) == []
 
 
 @pytest.mark.asyncio

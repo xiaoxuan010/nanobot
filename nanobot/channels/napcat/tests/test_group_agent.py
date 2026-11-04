@@ -21,6 +21,8 @@ from nanobot.channels.napcat.group_agent import (
     GroupMessage,
     GroupObserver,
 )
+from nanobot.channels.napcat.group_context import prepare_group_context
+from nanobot.channels.napcat.group_rendering import render_group_messages
 from nanobot.channels.napcat.runtime import NapcatChannel, NapcatConfig
 from nanobot.providers.base import GenerationSettings, LLMResponse, ToolCallRequest
 from nanobot.security.workspace_access import (
@@ -173,6 +175,14 @@ async def test_queries_render_lines_and_keep_targets_available_for_reply(tmp_pat
         result = await policy.tools.execute(tool, {"message_id": "9"} if tool == "get_message" else {})
         field = "message" if tool == "get_message" else "messages"
         assert json.loads(result)[field] == "QQ group 100 Test group\n[2023/11/15 06:13] (7)7 #9: earlier question"
+        observation = GroupMessage.parse(message(1, text="earlier"))
+        first = {
+            "role": "user", "content": render_group_messages([observation]),
+            "context_metadata": {"napcat_observation": [{**observation.wire(), "received_at_ns": 1, "media": []}]},
+        }
+        tool_entry = {"role": "tool", "content": str(result), "context_metadata": result.context_metadata}
+        projected = prepare_group_context([first, tool_entry])
+        assert "7… #9: earlier question" in json.loads(projected[1]["content"])[field]
         reply = await policy.tools.execute("reply_message", {"message_id": "9", "content": "answer"})
         assert not reply.is_error
     assert ch._call_action.call_args.args[1]["message"][0] == {"type": "reply", "data": {"id": "9"}}
@@ -217,7 +227,8 @@ async def test_runtime_steer_updates_reply_targets_and_avoids_final_roundtrip(tm
         result = await loop._process_message(first, pending_queue=pending)
         assert result is None
         assert len(calls) == 2
-        assert any("[2023/11/15 06:13] (7)7 #2: new question" in str(row.get("content")) for row in calls[1])
+        assert calls[1][:len(calls[0])] == calls[0]
+        assert any("[2023/11/15 06:13] 7… #2: new question" in str(row.get("content")) for row in calls[1])
         send = ch._call_action.call_args_list[-1]
         assert send.args[0] == "send_msg"
         assert send.args[1]["message"][0] == {"type": "reply", "data": {"id": "2"}}

@@ -290,11 +290,14 @@ class QQGroupTool(Tool):
                 "note": "An unknown delivery may already have reached QQ; do not blindly resend." if status == "unknown" else "",
             }, ensure_ascii=False))
         else:
+            records = result.pop("_napcat_query_observation", None)
             output = ToolResult(
                 json.dumps(result, ensure_ascii=False),
                 is_error=bool(result.get("source_error")),
                 continue_response=self.read_only or kwargs.get("continue_response", False) is True,
             )
+            if records is not None:
+                output.context_metadata = {"napcat_query_observation": records}
         if not self.read_only:
             output.context_metadata = {"napcat_action": {
                 "group_id": self.run.group_id, "completed_at_ns": time.time_ns(),
@@ -303,7 +306,8 @@ class QQGroupTool(Tool):
 
     async def _execute(self, args: dict[str, Any]) -> dict[str, Any]:
         if self.name == "get_message":
-            return {"message": render_group_messages([await self.run.get_message(args["message_id"])])}
+            message = await self.run.get_message(args["message_id"])
+            return {"message": render_group_messages([message]), "_napcat_query_observation": [message.wire()]}
         if self.name == "get_voice_transcript":
             if self.run.transcribe is None:
                 raise ValueError("Voice transcription is unavailable")
@@ -387,6 +391,7 @@ class QQGroupTool(Tool):
             "messages": render_group_messages(matched), "scanned_count": len(scanned), "scanned_from": min(times) if times else None,
             "scanned_to": max(times) if times else None, "stop_reason": reason,
             "complete": False, "next_anchor": anchor, "source_error": error,
+            "_napcat_query_observation": [message.wire() for message in sorted(matched, key=lambda item: item.timestamp)],
         }
 
 
@@ -446,7 +451,7 @@ def group_turn_policy(
         system_prompt_prefix=(
             "QQ 群消息格式说明（北京时间）："
             "每条消息行格式为 `[YYYY/MM/DD HH:MM] (QQ号)昵称 #消息编号: 正文`；"
-            "同一分钟的后续消息省略时间，紧接的同一发送者消息省略昵称。"
+            "同一分钟的后续消息省略时间；每位发送者首次显示 QQ 号和完整昵称，后续使用昵称缩写，昵称变化时重新显示完整身份。"
             "行内 `#消息编号` 是当前消息 ID，`[reply #编号 ...]` 中的编号是被引用消息 ID。"
         ),
     )

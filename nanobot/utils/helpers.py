@@ -381,14 +381,37 @@ def safe_filename(name: str) -> str:
     return _UNSAFE_CHARS.sub("_", name).strip()
 
 
+def display_image_path(path: str) -> str:
+    """Shorten NapCat media paths under the current user's home directory."""
+    from nanobot.config.paths import get_config_path
+
+    candidate = Path(path)
+    media_root = get_config_path().parent / "media" / "napcat"
+    if candidate.is_absolute() and candidate.is_relative_to(media_root) and candidate.is_relative_to(Path.home()):
+        return str(Path("~") / candidate.relative_to(Path.home()))
+    return path
+
+
+def shorten_image_references(text: str) -> str:
+    """Project stored local image references into their model-facing form."""
+    return re.sub(
+        r"\[image: ([^\]\r\n]+)\]",
+        lambda match: f"[image: {display_image_path(match.group(1))}]",
+        text,
+    )
+
+
 def image_placeholder_text(path: str | None, *, empty: str = "[image]") -> str:
     """Build an image placeholder string."""
-    return f"[image: {path}]" if path else empty
+    return f"[image: {display_image_path(path)}]" if path else empty
 
 
 def image_path_in_text(path: str, text: str) -> bool:
     """Recognize raw and JSON-escaped file references in message text."""
-    return bool(path) and (path in text or json.dumps(path, ensure_ascii=False)[1:-1] in text)
+    return bool(path) and any(
+        value in text or json.dumps(value, ensure_ascii=False)[1:-1] in text
+        for value in (path, display_image_path(path))
+    )
 
 
 def content_with_media_breadcrumbs(
