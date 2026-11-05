@@ -182,7 +182,7 @@ async def test_queries_render_lines_and_keep_targets_available_for_reply(tmp_pat
         }
         tool_entry = {"role": "tool", "content": str(result), "context_metadata": result.context_metadata}
         projected = prepare_group_context([first, tool_entry])
-        assert "7… #9: earlier question" in json.loads(projected[1]["content"])[field]
+        assert "(7)7 #9: earlier question" in json.loads(projected[1]["content"])[field]
         reply = await policy.tools.execute("reply_message", {"message_id": "9", "content": "answer"})
         assert not reply.is_error
     assert ch._call_action.call_args.args[1]["message"][0] == {"type": "reply", "data": {"id": "9"}}
@@ -228,7 +228,7 @@ async def test_runtime_steer_updates_reply_targets_and_avoids_final_roundtrip(tm
         assert result is None
         assert len(calls) == 2
         assert calls[1][:len(calls[0])] == calls[0]
-        assert any("[2023/11/15 06:13] 7… #2: new question" in str(row.get("content")) for row in calls[1])
+        assert any("[2023/11/15 06:13] (7)7 #2: new question" in str(row.get("content")) for row in calls[1])
         send = ch._call_action.call_args_list[-1]
         assert send.args[0] == "send_msg"
         assert send.args[1]["message"][0] == {"type": "reply", "data": {"id": "2"}}
