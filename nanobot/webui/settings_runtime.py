@@ -27,6 +27,7 @@ RUNTIME_CONFIG_PATHS = (
     "agents.defaults.max_tool_result_chars",
     "agents.defaults.provider_retry_mode",
     "agents.defaults.tool_hint_max_length",
+    "agents.defaults.image_max_side",
     "agents.defaults.dream.enabled",
     "gateway.host",
     "gateway.port",

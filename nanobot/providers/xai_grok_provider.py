@@ -21,6 +21,7 @@ from nanobot.providers.base import (
     LLMUsage,
     ToolCallRequest,
 )
+from nanobot.providers.images import prepare_inline_images
 from nanobot.providers.oauth_catalog_cache import (
     OAuthCatalogAuthRequiredError,
     OAuthModelCatalog,
@@ -176,10 +177,11 @@ class XAIGrokProvider(LLMProvider):
             retry_usage: LLMUsage | None = None
             while True:
                 try:
+                    wire_body = await prepare_inline_images(body, self.image_max_side)
                     result = await _request_xai(
                         DEFAULT_XAI_GROK_URL,
                         headers,
-                        body,
+                        wire_body,
                         proxy=self.proxy,
                         on_content_delta=on_content_delta,
                         on_thinking_delta=on_thinking_delta,

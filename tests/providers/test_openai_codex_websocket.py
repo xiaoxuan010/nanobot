@@ -309,7 +309,7 @@ async def test_gateway_prepares_image_batch_and_preserves_originals(codex_peer, 
         assert sum(map(len, urls)) <= 1_000_000
         for url in urls[:3]:
             with Image.open(io.BytesIO(base64.b64decode(url.split(",", 1)[1]))) as sent:
-                assert sent.size == (900, 1800)
+                assert sent.size == (800, 1600)
         assert base64.b64decode(urls[3].split(",", 1)[1]) == small_bytes
         assert [path.read_bytes() for path in paths] == originals
 
@@ -349,7 +349,8 @@ async def test_codex_prepares_tool_images_and_preserves_png_transparency(codex_p
     )
     assert result.content == "answer"
     output = server.requests[0][1]["input"][-1]["output"]
-    urls = [block["image_url"] for block in output]
+    urls = [block["image_url"] for block in output if block["type"] == "input_image"]
+    assert any("1080x2376" in block.get("text", "") and "727x1600" in block.get("text", "") for block in output)
     assert sum(map(len, urls)) <= 1_000_000
     assert len(base64.b64decode(urls[0].split(",", 1)[1])) < len(image_data.getvalue())
     with Image.open(io.BytesIO(base64.b64decode(urls[1].split(",", 1)[1]))) as sent_png:
@@ -371,7 +372,9 @@ async def test_codex_image_budget_limits_downscaling(codex_peer):
         provider_context=_context(),
     )
     assert result.content == "answer"
-    sent_url = server.requests[0][1]["input"][0]["content"][0]["image_url"]
+    content = server.requests[0][1]["input"][0]["content"]
+    sent_url = next(block["image_url"] for block in content if block["type"] == "input_image")
+    assert any("1600x1600" in block.get("text", "") for block in content)
     assert len(sent_url) <= 1_000_000
     with Image.open(io.BytesIO(base64.b64decode(sent_url.split(",", 1)[1]))) as sent:
         assert 1200 <= sent.width < 1600

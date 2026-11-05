@@ -2581,6 +2581,20 @@ The deprecated `agents.defaults.failOnToolError` field is silently ignored when 
 | `agents.defaults.maxConcurrentSubagents` | `4` | Maximum number of subagents that may run at the same time. Additional tasks wait for capacity. |
 
 
+## Image Input Resolution
+
+In **Settings → Advanced → Execution**, set **Image long side** to limit the longer side of images sent to the conversation model, in pixels. The default is `1600`; larger images are resized proportionally, and the model receives the original and transmitted dimensions. The local source image is not changed. Animated GIFs retain animation when resized. The existing per-request image byte budget can reduce dimensions further. Restart the gateway after changing this setting.
+
+```json
+{
+  "agents": {
+    "defaults": {
+      "imageMaxSide": 1600
+    }
+  }
+}
+```
+
 ## Auto Compact
 
 Configure **Auto-compact idle sessions** and **Idle timeout** in **Settings → System → Sessions**, then restart the gateway to apply changes. The scan interval is configured directly in `config.json`; use `/compact` for an immediate compaction.

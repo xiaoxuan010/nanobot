@@ -761,7 +761,7 @@ class AnthropicProvider(LLMProvider):
         tool_choice: str | dict[str, Any] | None = None,
     ) -> LLMResponse:
         kwargs = self._build_kwargs(
-            await prepare_message_images(messages), tools, model, max_tokens, temperature,
+            await prepare_message_images(messages, self.image_max_side), tools, model, max_tokens, temperature,
             reasoning_effort, tool_choice,
         )
         try:
@@ -799,7 +799,7 @@ class AnthropicProvider(LLMProvider):
         on_tool_call_delta: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
     ) -> LLMResponse:
         kwargs = self._build_kwargs(
-            await prepare_message_images(messages), tools, model, max_tokens, temperature,
+            await prepare_message_images(messages, self.image_max_side), tools, model, max_tokens, temperature,
             reasoning_effort, tool_choice,
         )
         idle_timeout_s = resolve_stream_idle_timeout_s()

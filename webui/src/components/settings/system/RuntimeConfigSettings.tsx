@@ -44,9 +44,10 @@ export function useRuntimeConfigSettings(
     if (invalidField && saving === null) document.getElementById(`runtime-${invalidField}`)?.focus();
   }, [invalidField, saving]);
   const value = (path: string): Draft => drafts[path] ?? displayValue(settings?.runtime_config?.[path]);
-  const visible = (field: RuntimeConfigField) => !field.when || (Array.isArray(field.when.value)
+  const visible = (field: RuntimeConfigField) => (!field.optional || Object.hasOwn(settings?.runtime_config ?? {}, field.path))
+    && (!field.when || (Array.isArray(field.when.value)
     ? field.when.value.includes(String(value(field.when.path)))
-    : value(field.when.path) === field.when.value);
+    : value(field.when.path) === field.when.value));
   const dirty = (field: RuntimeConfigField) =>
     drafts[field.path] !== undefined && drafts[field.path] !== displayValue(settings?.runtime_config?.[field.path]);
   const discard = (group: string) => {

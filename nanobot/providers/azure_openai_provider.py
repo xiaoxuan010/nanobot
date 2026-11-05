@@ -310,6 +310,7 @@ class AzureOpenAIProvider(LLMProvider):
         try:
             return await self._responses.sdk_request(
                 self._client, body, provider=self._responses_state_provider(),
+                image_max_side=self.image_max_side,
             )
         except Exception as e:
             return self._handle_error(e)
@@ -338,6 +339,7 @@ class AzureOpenAIProvider(LLMProvider):
         try:
             return await self._responses.sdk_request(
                 self._client, body, provider=self._responses_state_provider(),
+                image_max_side=self.image_max_side,
                 on_content_delta=on_content_delta, on_thinking_delta=on_thinking_delta,
                 on_tool_call_delta=on_tool_call_delta,
             )

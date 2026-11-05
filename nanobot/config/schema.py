@@ -182,6 +182,7 @@ class AgentDefaults(Base):
     max_concurrent_subagents: int = Field(default=4, ge=1)
     subagent_model_preset: str | None = None
     max_tool_result_chars: int = 16_000
+    image_max_side: int = Field(default=1600, ge=1)
     provider_retry_mode: Literal["standard", "persistent"] = "standard"
     tool_hint_max_length: int = Field(
         default=40,

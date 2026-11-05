@@ -527,6 +527,7 @@
           "label": "持续重试",
           "help": "可恢复错误持续重试；关闭用标准策略\n\n遇到可恢复的请求错误时持续重试。关闭后使用标准重试策略。"
         },
+        "agents_defaults_image_max_side": {"label": "图片长边", "help": "发送给模型的图片长边上限，单位像素；超出时等比缩小，保留原图。"},
         "agents_defaults_tool_hint_max_length": {
           "label": "提示长度",
           "help": "工具执行提示的字符数上限\n\n工具执行时显示的简短提示最多包含多少个字符。"

@@ -439,6 +439,7 @@ class LLMProvider(ABC):
         self.api_base = api_base
         self.provider_name = provider_name
         self.generation: GenerationSettings = GenerationSettings()
+        self.image_max_side = 1600
         self._llm_call_observer: LLMCallObserver | None = None
         self._usage_estimation_slots = asyncio.Semaphore(2)
 

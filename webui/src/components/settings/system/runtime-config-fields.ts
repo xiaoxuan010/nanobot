@@ -5,6 +5,7 @@ export interface RuntimeConfigField {
   options?: string[];
   when?: { path: string; value: string | boolean | string[] };
   manual?: boolean;
+  optional?: boolean;
   min?: number;
   max?: number;
 }
@@ -39,6 +40,7 @@ export const RUNTIME_CONFIG_FIELDS: RuntimeConfigField[] = [
   { group: "execution", path: "agents.defaults.subagent_model_preset", kind: "preset" },
   { group: "execution", path: "agents.defaults.max_tool_result_chars", kind: "number", min: 1 },
   { group: "execution", path: "agents.defaults.tool_hint_max_length", kind: "number", min: 20, max: 500 },
+  { group: "execution", path: "agents.defaults.image_max_side", kind: "number", min: 1, optional: true },
   { group: "execution", path: "tools.max_session_messages_per_minute", kind: "number", min: 1 },
   { group: "sessions", path: "agents.defaults.unified_session", kind: "boolean" },
   { group: "sessions", path: "agents.defaults.session_ttl_minutes", kind: "idle-compaction", manual: true },

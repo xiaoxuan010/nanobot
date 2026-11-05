@@ -306,7 +306,7 @@ class OpenAICodexProvider(LLMProvider):
                 trace_name: str,
                 validate: Callable[[LLMResponse], object] | None = None,
             ) -> LLMResponse:
-                wire_body = await prepare_inline_images(without_response_item_ids(request_body))
+                wire_body = await prepare_inline_images(without_response_item_ids(request_body), self.image_max_side)
                 tracer = _start_codex_langfuse_generation(
                     name=trace_name,
                     model=_strip_model_prefix(str(wire_body.get("model") or model)),

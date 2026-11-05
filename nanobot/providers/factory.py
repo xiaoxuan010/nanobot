@@ -157,6 +157,7 @@ def _make_provider_core(
         )
 
     provider.generation = preset.to_generation_settings()
+    provider.image_max_side = config.agents.defaults.image_max_side
     return provider
 
 
@@ -264,6 +265,7 @@ def _preset_provider_signature(
         preset.temperature,
         preset.reasoning_effort,
         preset.context_window_tokens,
+        config.agents.defaults.image_max_side,
         preset.api.model_dump_json() if preset.api is not None else None,
         config.network.resolve_proxy(provider_config.use_proxy) if provider_config else None,
         provider_config.thinking_style if provider_config else None,

@@ -239,7 +239,6 @@ class ResponsesBackend:
         on_response_event: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
     ) -> LLMResponse:
         options: dict[str, Any] = {"timeout": resolve_stream_idle_timeout_s()}
-        body = await prepare_inline_images(body)
         if verify is not None:
             options["verify"] = verify
         if proxy:
@@ -261,13 +260,14 @@ class ResponsesBackend:
         body: dict[str, Any],
         *,
         provider: str,
+        image_max_side: int = 1600,
         extra_headers: dict[str, str] | None = None,
         on_content_delta: Callable[[str], Awaitable[None]] | None = None,
         on_thinking_delta: Callable[[str], Awaitable[None]] | None = None,
         on_tool_call_delta: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
     ) -> LLMResponse:
         options: dict[str, Any] = {}
-        body = await prepare_inline_images(body)
+        body = await prepare_inline_images(body, image_max_side)
         if extra_headers is not None:
             options["extra_headers"] = extra_headers
         idle_timeout = resolve_stream_idle_timeout_s()

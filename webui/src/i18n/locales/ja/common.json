@@ -500,6 +500,7 @@
         "agents_defaults_max_concurrent_subagents": {"label": "同時サブエージェント", "help": "同時に実行するサブエージェントの上限です。\n\n同時に実行するサブエージェントの最大数です。"},
         "agents_defaults_max_tool_result_chars": {"label": "結果の長さ", "help": "モデルに渡すツール結果ごとの文字数上限です。\n\nモデルのコンテキストに含めるツール出力を制限します。"},
         "agents_defaults_provider_retry_mode": {"label": "再試行を継続", "help": "回復可能なエラーで再試行します。オフでは標準の再試行を使います。\n\nモデルへのリクエストが一時的なエラーで失敗した場合、成功するまで再試行します。オフにすると再試行回数を制限します。"},
+        "agents_defaults_image_max_side": {"label": "画像の長辺", "help": "モデルに送る画像の長辺の上限（ピクセル）。大きい画像は縦横比を保って縮小し、元画像は保持します。"},
         "agents_defaults_tool_hint_max_length": {"label": "概要の長さ", "help": "ツールの実行概要に表示する文字数上限です。\n\nツールの動作を簡潔に表示する説明文の最大文字数です。"},
         "tools_max_session_messages_per_minute": {"label": "メッセージ頻度", "help": "同じセッションにツールが送る毎分のメッセージ上限です。\n\nツールが会話にメッセージを送信する頻度を制限します。"},
         "agents_defaults_unified_session": {"label": "セッション共有", "help": "同じユーザーのチャット履歴を複数のプラットフォームで共有します。\n\n1 人のユーザーが複数のチャットプラットフォームで同じ会話を使用します。"},

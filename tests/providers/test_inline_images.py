@@ -167,7 +167,7 @@ def _assert_prepared(images, blocks):
     assert sum(4 * ((len(raw) + 2) // 3) + len("data:image/jpeg;base64,") for raw in images) <= 1_000_000
     for raw in images[:3]:
         with Image.open(io.BytesIO(raw)) as image:
-            assert image.size == (900, 1800)
+            assert image.size == (800, 1600)
     with Image.open(io.BytesIO(images[3])) as image:
         assert image.mode == "RGBA"
         assert image.size == (700, 700)

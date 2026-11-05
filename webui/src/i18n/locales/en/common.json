@@ -527,6 +527,7 @@
           "label": "Keep retrying",
           "help": "Retry recoverable errors; turn off for standard retries.\n\nKeep retrying requests after recoverable errors. Turn off to use standard retries."
         },
+        "agents_defaults_image_max_side": {"label": "Image long side", "help": "Maximum image dimension sent to the model, in pixels. Larger images are resized proportionally; original files are kept."},
         "agents_defaults_tool_hint_max_length": {
           "label": "Summary length",
           "help": "Character limit for tool activity summaries.\n\nMaximum number of characters shown in a tool activity summary."

@@ -12,7 +12,7 @@ from math import ceil
 from typing import Any, cast
 
 from loguru import logger
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, ImageSequence
 
 from nanobot.utils.helpers import SMALL_INLINE_IMAGE_BYTES
 
@@ -25,6 +25,8 @@ class _InlineImage:
     container: dict[str, Any]
     key: str
     detail: object
+    block: dict[str, Any]
+    content: list[dict[str, Any]]
 
     @property
     def url(self) -> str:
@@ -53,7 +55,7 @@ def _inline_images(body: dict[str, Any]) -> Iterator[_InlineImage]:
                 isinstance(url, str)
                 and url.startswith("data:image/") and ";base64," in url
             ):
-                yield _InlineImage(container, key, container.get("detail"))
+                yield _InlineImage(container, key, container.get("detail"), block, cast(list[dict[str, Any]], content))
 
 
 @dataclass
@@ -84,18 +86,73 @@ class _ImageCopy:
             self.target.container[self.target.key] = f"data:{mime};base64,{base64.b64encode(raw).decode()}"
 
 
-async def prepare_inline_images(body: dict[str, Any]) -> dict[str, Any]:
-    """Keep small requests unchanged and prepare large image batches off the event loop."""
-    total_bytes = sum(len(image.url) for image in _inline_images(body))
-    if total_bytes <= INLINE_IMAGE_BYTE_BUDGET:
+async def prepare_inline_images(body: dict[str, Any], max_side: int = 1600) -> dict[str, Any]:
+    """Resize images and prepare large requests off the event loop."""
+    if not any(_inline_images(body)):
         return body
-    return await asyncio.to_thread(_prepare_copies, body, total_bytes)
+    return await asyncio.to_thread(_prepare_images, body, max_side)
 
 
-async def prepare_message_images(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+async def prepare_message_images(messages: list[dict[str, Any]], max_side: int = 1600) -> list[dict[str, Any]]:
     """Prepare public image_url messages before provider-specific conversion."""
-    prepared = await prepare_inline_images({"messages": messages})
+    prepared = await prepare_inline_images({"messages": messages}, max_side)
     return cast(list[dict[str, Any]], prepared["messages"])
+
+
+def _prepare_images(body: dict[str, Any], max_side: int) -> dict[str, Any]:
+    prepared = deepcopy(body)
+    blocks = list(_inline_images(prepared))
+    original_urls = [block.url for block in blocks]
+    original_sizes: list[tuple[int, int] | None] = []
+    for block in blocks:
+        size: tuple[int, int] | None = None
+        try:
+            raw = base64.b64decode(block.url.split(";base64,", 1)[1], validate=True)
+            with Image.open(io.BytesIO(raw)) as original:
+                image = ImageOps.exif_transpose(original) if not getattr(original, "is_animated", False) else original
+                size = original.size
+                if max(image.size) <= max_side:
+                    continue
+                scale = max_side / max(image.size)
+                target_size = (max(1, int(image.width * scale)), max(1, int(image.height * scale)))
+                output = io.BytesIO()
+                if getattr(original, "is_animated", False):
+                    frames = [frame.convert("RGBA").resize(target_size, Image.Resampling.LANCZOS)
+                              for frame in ImageSequence.Iterator(original)]
+                    durations = [frame.info.get("duration", 0) for frame in ImageSequence.Iterator(original)]
+                    options: dict[str, Any] = {"duration": durations, "disposal": 2}
+                    if "loop" in original.info:
+                        options["loop"] = original.info["loop"]
+                    frames[0].save(output, format="GIF", save_all=True, append_images=frames[1:], **options)
+                    mime = "image/gif"
+                else:
+                    fmt = "PNG" if original.format == "PNG" or "A" in image.getbands() or "transparency" in image.info else "JPEG"
+                    if fmt == "JPEG" and image.mode != "RGB":
+                        image = image.convert("RGB")
+                    image.resize(target_size, Image.Resampling.LANCZOS).save(output, format=fmt, quality=85, optimize=True)
+                    mime = "image/png" if fmt == "PNG" else "image/jpeg"
+                block.container[block.key] = f"data:{mime};base64,{base64.b64encode(output.getvalue()).decode()}"
+        except (ValueError, OSError, Image.DecompressionBombError) as exc:
+            size = None
+            logger.info("Inline image resizing skipped: type={}", type(exc).__name__)
+        finally:
+            original_sizes.append(size)
+    total_bytes = sum(len(image.url) for image in blocks)
+    if total_bytes > INLINE_IMAGE_BYTE_BUDGET:
+        prepared = _prepare_copies(prepared, total_bytes)
+        blocks = list(_inline_images(prepared))
+    for block, original_size, original_url in reversed(list(zip(blocks, original_sizes, original_urls))):
+        if original_size is None:
+            continue
+        raw = base64.b64decode(block.url.split(";base64,", 1)[1])
+        with Image.open(io.BytesIO(raw)) as image:
+            final_size = image.size
+        if block.url != original_url:
+            index = next(i for i, item in enumerate(block.content) if item is block.block)
+            block.content.insert(index, {"type": "text", "text":
+                f"Image prepared: original {original_size[0]}x{original_size[1]} pixels; "
+                f"sent {final_size[0]}x{final_size[1]} pixels."})
+    return prepared
 
 
 def _prepare_copies(body: dict[str, Any], total_bytes: int) -> dict[str, Any]:

@@ -1817,6 +1817,7 @@ class OpenAICompatProvider(LLMProvider):
                     )
                     result = await self._responses.sdk_request(
                         client, body, provider=self._responses_state_provider(),
+                        image_max_side=self.image_max_side,
                         extra_headers=affinity,
                     )
                     self._record_responses_success(model, reasoning_effort)
@@ -1833,7 +1834,7 @@ class OpenAICompatProvider(LLMProvider):
                 reasoning_effort, tool_choice,
                 extra_headers=affinity,
             )
-            kwargs = await prepare_inline_images(kwargs)
+            kwargs = await prepare_inline_images(kwargs, self.image_max_side)
             chat_raw = cast(
                 Any,
                 await client.chat.completions.create(**kwargs),
@@ -1870,6 +1871,7 @@ class OpenAICompatProvider(LLMProvider):
                     body["stream"] = True
                     result = await self._responses.sdk_request(
                         client, body, provider=self._responses_state_provider(),
+                        image_max_side=self.image_max_side,
                         extra_headers=affinity, on_content_delta=on_content_delta,
                         on_thinking_delta=on_thinking_delta, on_tool_call_delta=on_tool_call_delta,
                     )
@@ -1887,7 +1889,7 @@ class OpenAICompatProvider(LLMProvider):
                 reasoning_effort, tool_choice,
                 extra_headers=affinity,
             )
-            kwargs = await prepare_inline_images(kwargs)
+            kwargs = await prepare_inline_images(kwargs, self.image_max_side)
             if self._spec and self._spec.name == "zhipu" and tools and on_tool_call_delta:
                 # Z.AI/GLM keeps streaming tool-call arguments behind an
                 # explicit provider flag.  Pass it through the OpenAI SDK's

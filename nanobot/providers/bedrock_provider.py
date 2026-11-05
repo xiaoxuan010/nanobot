@@ -743,7 +743,7 @@ class BedrockProvider(LLMProvider):
     ) -> LLMResponse:
         try:
             kwargs = self._build_kwargs(
-                await prepare_message_images(messages), tools, model, max_tokens, temperature, reasoning_effort, tool_choice
+                await prepare_message_images(messages, self.image_max_side), tools, model, max_tokens, temperature, reasoning_effort, tool_choice
             )
             response = cast(
                 dict[str, Any],
@@ -776,7 +776,7 @@ class BedrockProvider(LLMProvider):
 
         try:
             kwargs = self._build_kwargs(
-                await prepare_message_images(messages), tools, model, max_tokens, temperature, reasoning_effort, tool_choice
+                await prepare_message_images(messages, self.image_max_side), tools, model, max_tokens, temperature, reasoning_effort, tool_choice
             )
             response = cast(
                 dict[str, Any],

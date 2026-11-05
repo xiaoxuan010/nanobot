@@ -500,6 +500,7 @@
         "agents_defaults_max_concurrent_subagents": {"label": "Subagen bersamaan", "help": "Batas subagen yang berjalan bersamaan.\n\nJumlah maksimum subagen yang berjalan bersamaan."},
         "agents_defaults_max_tool_result_chars": {"label": "Panjang hasil", "help": "Batas karakter tiap hasil alat yang dikirim ke model.\n\nMembatasi keluaran alat yang disertakan dalam konteks model."},
         "agents_defaults_provider_retry_mode": {"label": "Terus mencoba", "help": "Ulangi setelah kesalahan yang dapat dipulihkan; nonaktifkan untuk percobaan standar.\n\nMencoba kembali permintaan ke model saat terjadi kesalahan sementara. Nonaktifkan untuk membatasi jumlah percobaan ulang."},
+        "agents_defaults_image_max_side": {"label": "Sisi panjang gambar", "help": "Batas sisi panjang gambar yang dikirim ke model, dalam piksel. Gambar besar diperkecil secara proporsional dan berkas asli disimpan."},
         "agents_defaults_tool_hint_max_length": {"label": "Panjang ringkasan", "help": "Batas karakter ringkasan aktivitas alat.\n\nPanjang maksimum petunjuk singkat aktivitas alat."},
         "tools_max_session_messages_per_minute": {"label": "Frekuensi pesan", "help": "Batas pesan alat ke satu sesi per menit.\n\nMembatasi frekuensi alat mengirim pesan ke percakapan."},
         "agents_defaults_unified_session": {"label": "Sesi bersama", "help": "Bagikan riwayat chat satu pengguna di berbagai platform.\n\nMenggunakan satu percakapan untuk satu pengguna di beberapa platform chat."},
