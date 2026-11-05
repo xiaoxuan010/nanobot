@@ -13,6 +13,7 @@ from nanobot.channels.napcat.group_rendering import inline_text, render_group_me
 from nanobot.runtime_context import RUNTIME_CONTEXT_MESSAGE_META
 from nanobot.utils.helpers import (
     content_with_media_breadcrumbs,
+    display_image_path,
     image_path_in_text,
     image_placeholder_text,
 )
@@ -114,7 +115,51 @@ def prepare_group_context(messages: list[dict[str, Any]]) -> list[dict[str, Any]
         for index in range(len(messages))
         for message in [*before[index], *kept[index]]
     ]
-    return _shorten_senders(ordered)
+    return _label_group_images(_shorten_senders(ordered))
+
+
+def _label_group_images(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Pair each visible group image with its reference in the observation text."""
+    result: list[dict[str, Any]] = []
+    for message in messages:
+        content = message.get("content")
+        records = message.get("context_metadata", {}).get("napcat_observation")
+        if message.get("role") != "user" or not records or not isinstance(content, list):
+            result.append(message)
+            continue
+        blocks = cast(list[dict[str, Any]], content)
+        text_block = next((block for block in blocks if block.get("type") == "text"
+                           and block.get("text", "").startswith("QQ group ")), None)
+        if text_block is None:
+            result.append(message)
+            continue
+        text = text_block["text"]
+        prepared: list[dict[str, Any]] = []
+        number = 0
+        for block in blocks:
+            if block.get("type") != "image_url":
+                prepared.append(block)
+                continue
+            path = block.get("_meta", {}).get("path")
+            if not path:
+                prepared.append(block)
+                continue
+            marker = image_placeholder_text(inline_text(display_image_path(path)))
+            if marker not in text:
+                prepared.append(block)
+                continue
+            number += 1
+            label = f"[Image #{number}]"
+            text = text.replace(marker, label, 1)
+            prepared.extend([
+                {"type": "text", "text": f'<image name="{label}" path={json.dumps(display_image_path(path), ensure_ascii=False)}>'},
+                block,
+                {"type": "text", "text": "</image>"},
+            ])
+        result.append({**message, "content": [
+            {**block, "text": text} if block is text_block else block for block in prepared
+        ]})
+    return result
 
 
 def _shorten_senders(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
