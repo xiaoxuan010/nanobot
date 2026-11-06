@@ -66,7 +66,7 @@ from nanobot.webui.settings_contracts import (
     SettingsRequest,
     SettingsRouteResult,
 )
-from nanobot.webui.settings_runtime import runtime_config_payload
+from nanobot.webui.settings_runtime import LIVE_RUNTIME_CONFIG_PATHS, runtime_config_payload
 from nanobot.webui.settings_services import WebUISettingsServices
 from nanobot.webui.version_check import check_for_update
 
@@ -406,7 +406,7 @@ class WebUISettingsRouter:
         if action == "runtime-config-update":
             return {
                 path: value for path, value in runtime_config_payload(config).items()
-                if path != "agents.defaults.subagent_model_preset"
+                if path not in LIVE_RUNTIME_CONFIG_PATHS
             }
         if action == "image-update":
             return config.tools.image_generation.model_dump(mode="json")

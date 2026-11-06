@@ -59,7 +59,7 @@ from nanobot.webui.settings_contracts import (
     query_first,
     query_first_alias,
 )
-from nanobot.webui.settings_runtime import runtime_config_payload
+from nanobot.webui.settings_runtime import LIVE_RUNTIME_CONFIG_PATHS, runtime_config_payload
 
 if TYPE_CHECKING:
     from nanobot.channels.plugin import ChannelPlugin
@@ -516,7 +516,7 @@ class SystemSettingsHandler:
                     values,
                     local_browser=request.local_browser,
                 )
-                if "agents.defaults.subagent_model_preset" in values and self.settings.refresh_runtime_config is not None:
+                if values.keys() & LIVE_RUNTIME_CONFIG_PATHS and self.settings.refresh_runtime_config is not None:
                     self.settings.refresh_runtime_config()
             except WebUISettingsError as exc:
                 return SettingsRouteResult.failure(exc.status, exc.message)

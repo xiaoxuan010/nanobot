@@ -2583,7 +2583,7 @@ The deprecated `agents.defaults.failOnToolError` field is silently ignored when 
 
 ## Image Input Resolution
 
-In **Settings → Advanced → Execution**, set **Image long side** to limit the longer side of images sent to the conversation model, in pixels. The default is `1600`; larger images are resized proportionally, and the model receives the original and transmitted dimensions. The local source image is not changed. Animated GIFs retain animation when resized. The existing per-request image byte budget can reduce dimensions further. Restart the gateway after changing this setting.
+In **Settings → Advanced → Execution**, set **Image long side** to limit the longer side of images sent to the conversation model, in pixels. The default is `1600`; larger images are resized proportionally, and the model receives the original and transmitted dimensions. The local source image is not changed. Animated GIFs retain animation when resized. The existing per-request image byte budget can reduce dimensions further. Changes apply to new turns after saving; turns already in progress retain their previous setting.
 
 ```json
 {

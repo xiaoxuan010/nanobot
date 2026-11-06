@@ -62,6 +62,11 @@ RUNTIME_CONFIG_PATHS = (
     "api.timeout",
 )
 
+LIVE_RUNTIME_CONFIG_PATHS = frozenset({
+    "agents.defaults.subagent_model_preset",
+    "agents.defaults.image_max_side",
+})
+
 
 def _parent(config: Config, path: str) -> tuple[BaseModel, str]:
     # Keep the existing WebUI editor on the canonical hard-runtime field.

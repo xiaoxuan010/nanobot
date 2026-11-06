@@ -490,7 +490,7 @@ def update_runtime_config_settings(
         requires_restart=any(
             value != before[path]
             for path, value in runtime.runtime_config_payload(config).items()
-            if path != "agents.defaults.subagent_model_preset"
+            if path not in runtime.LIVE_RUNTIME_CONFIG_PATHS
         ),
         config_path=config_path,
     )
