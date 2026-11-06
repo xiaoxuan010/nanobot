@@ -214,7 +214,8 @@ def _shorten_senders(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     sender += sender_title(message)
             seen[key] = (message.name, message.role, message.title)
             line = lines[index]
-            timestamp = line[:line.index("] ") + 2] if line.startswith("[") else ""
+            has_timestamp = index == 1 or message.timestamp // 60 != observations[index - 2].timestamp // 60
+            timestamp = line[:line.index("] ") + 2] if has_timestamp else ""
             identity = f"#{inline_text(message.message_id)}: " if message.targetable else "event: "
             start = line.index(identity, len(timestamp))
             lines[index] = timestamp + sender + " " + line[start:]
