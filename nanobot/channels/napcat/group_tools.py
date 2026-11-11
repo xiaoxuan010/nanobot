@@ -269,7 +269,7 @@ class QQGroupTool(Tool):
         if not self.read_only and self.name != "stay_silent":
             fields["continue_response"] = {
                 "type": "boolean", "default": False,
-                "description": "Default false: finish after this response's tool calls succeed. Set true only when you need their results for further work; the runtime executes the entire tool group before calling the model again. Queries, failed calls, and unknown outcomes return results to the model for handling. No extra model request is needed to verify success or acknowledge sending.",
+                "description": "Default false. Explicitly set true whenever you need to continue working after sending a message or performing this action, whether to use the tool results or to do any other follow-up work. The runtime executes the entire tool group before calling the model again. If all calls succeed and none requires continuation, the current agent loop ends; further work must wait for the next trigger. Queries, failed calls, and unknown outcomes return results to the model for handling. No extra model request is needed merely to verify success or acknowledge sending.",
             }
         return {"type": "object", "properties": fields, "required": required, "additionalProperties": False}
 
