@@ -383,7 +383,7 @@ async def test_mixed_tool_text_survives_model_save_replay(tmp_path):
     loop._save_turn(session, live, skip=0)
     replay = governor.prepare_messages_for_model(config, session.get_history())
     assert replay[-1]["content"][0]["text"] == reference
-    assert "data:image" not in str(replay[-1]["content"])
+    assert replay[-1]["content"][1] == image
     readback = await reader.execute(path=".nanobot/tool-results/mixed/mixed_text_0.txt")
     assert raw in readback
     assert messages[-1]["content"][0]["text"] == raw
