@@ -115,7 +115,6 @@ from nanobot.session.summary import (
 from nanobot.triggers.local_turns import LocalTriggerTurnCoordinator
 from nanobot.utils.cancellation import task_is_cancelling
 from nanobot.utils.document import reference_non_image_attachments
-from nanobot.utils.helpers import image_path_in_text, image_placeholder_text
 from nanobot.utils.llm_runtime import LLMRuntime
 from nanobot.utils.progress_events import output_events
 from nanobot.utils.runtime import (
@@ -2493,39 +2492,6 @@ class AgentLoop:
         if ctx.ephemeral and ctx.outbound is not None:
             ctx.outbound.metadata["_stop_reason"] = ctx.stop_reason
 
-    def _sanitize_persisted_blocks(
-        self,
-        content: list[object],
-    ) -> list[object]:
-        """Strip volatile multimodal payloads before writing session history."""
-        text_blocks = [cast(dict[str, Any], block) for block in content if isinstance(block, dict)]
-        text = "\n".join(block["text"] for block in text_blocks if block.get("type") == "text")
-        filtered: list[object] = []
-        for block in content:
-            if not isinstance(block, dict):
-                filtered.append(block)
-                continue
-
-            block_data = cast(dict[str, Any], block)
-            image_url = cast(dict[str, Any], block_data.get("image_url", {}))
-            if block_data.get("type") == "image_url" and str(
-                image_url.get("url", "")
-            ).startswith("data:image/"):
-                internal_meta = cast(dict[str, Any], block_data.get("_meta") or {})
-                if internal_meta.get("retain_preview") is True:
-                    filtered.append(block_data)
-                    continue
-                path = cast(str, internal_meta.get("path", ""))
-                if not image_path_in_text(path, text):
-                    filtered.append(
-                        {"type": "text", "text": image_placeholder_text(path)}
-                    )
-                continue
-
-            filtered.append(block_data)
-
-        return filtered
-
     @staticmethod
     def _validated_checkpoint_boundary(
         checkpoint: SessionSummaryCheckpoint | None,
@@ -2627,22 +2593,18 @@ class AgentLoop:
                     )
                     continue
                 fulfilled_tool_call_ids.add(tool_call_id_str)
-                # Preserve model-visible text for replay; redact only inline images.
+                # Preserve model-visible tool results for replay.
                 if isinstance(content, list):
-                    filtered = self._sanitize_persisted_blocks(
-                        cast(list[object], content),
-                    )
+                    filtered = cast(list[object], content)
                     if not filtered:
-                        # Preserve the tool_call/result pair after block filtering.
+                        # Preserve the tool_call/result pair.
                         filtered = [
                             {"type": "text", "text": "[tool result omitted during persistence]"}
                         ]
                     entry["content"] = filtered
             elif role == "user":
                 if isinstance(content, list):
-                    filtered = self._sanitize_persisted_blocks(
-                        cast(list[object], content),
-                    )
+                    filtered = cast(list[object], content)
                     if not filtered:
                         continue
                     entry["content"] = filtered

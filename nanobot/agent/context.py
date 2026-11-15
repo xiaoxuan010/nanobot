@@ -1,6 +1,5 @@
 """Context builder for assembling agent prompts."""
 
-import mimetypes
 import platform
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,10 +20,7 @@ from nanobot.session.keys import last_channel_from_metadata
 from nanobot.session.manager import Session
 from nanobot.session.summary import SessionSummary
 from nanobot.utils.helpers import (
-    build_inline_image_block,
-    detect_image_mime,
-    image_path_in_text,
-    image_placeholder_text,
+    build_user_image_content,
     load_bundled_template,
 )
 from nanobot.utils.prompt_templates import render_template
@@ -344,24 +340,4 @@ class ContextBuilder:
         image_paths: list[str] | None,
     ) -> str | list[dict[str, Any]]:
         """Build user message content from prefiltered image paths."""
-        if not image_paths:
-            return text
-
-        media_blocks: list[dict[str, Any]] = []
-        for path in image_paths:
-            p = Path(path)
-            if not p.is_file():
-                continue
-            raw = p.read_bytes()
-            # Re-detect from the bytes used for the request: the file may have
-            # changed since attachment routing, and the data URL needs its MIME.
-            mime = detect_image_mime(raw) or mimetypes.guess_type(path)[0]
-            if not mime or not mime.startswith("image/"):
-                continue
-            if not image_path_in_text(str(p), text):
-                media_blocks.append({"type": "text", "text": image_placeholder_text(str(p))})
-            media_blocks.append(build_inline_image_block(raw, mime, str(p)))
-
-        if not media_blocks:
-            return text
-        return media_blocks + [{"type": "text", "text": text}]
+        return build_user_image_content(text, image_paths)

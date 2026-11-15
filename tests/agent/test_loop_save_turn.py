@@ -588,7 +588,7 @@ def test_save_turn_commits_summary_boundary_without_rewriting_raw_history() -> N
     ]
 
 
-def test_save_turn_keeps_image_placeholder_and_runtime_context() -> None:
+def test_save_turn_keeps_image_and_runtime_context() -> None:
     loop = _mk_loop()
     session = Session(key="test:image")
     block = RuntimeContextBlock(source="test", content="provider context")
@@ -604,16 +604,16 @@ def test_save_turn_keeps_image_placeholder_and_runtime_context() -> None:
         skip=0,
     )
     assert session.messages[0]["content"] == [
-        {"type": "text", "text": "[image: /media/feishu/photo.jpg]"},
+        {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}, "_meta": {"path": "/media/feishu/photo.jpg"}},
         {"type": "text", "text": "provider context"},
     ]
     assert public_history_message(session.messages[0])["content"] == [
-        {"type": "text", "text": "[image: /media/feishu/photo.jpg]"}
+        {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}, "_meta": {"path": "/media/feishu/photo.jpg"}}
     ]
 
 
 @pytest.mark.parametrize("inline_reference", [False, True])
-def test_native_image_ingress_retains_small_preview_and_retires_large_original(tmp_path, inline_reference) -> None:
+def test_native_image_ingress_replays_small_and_large_images(tmp_path, inline_reference) -> None:
     from random import Random
 
     from PIL import Image
@@ -634,12 +634,12 @@ def test_native_image_ingress_retains_small_preview_and_retires_large_original(t
     session = Session(key="test:preview-history")
     loop._save_turn(session, [current], skip=0)
     replay = session.get_history()[0]["content"]
-    assert [part["image_url"]["url"] for part in replay if part["type"] == "image_url"] == [images[0]["image_url"]["url"]]
+    assert [part["image_url"]["url"] for part in replay if part["type"] == "image_url"] == [image["image_url"]["url"] for image in images]
     replay_text = "\n".join(part["text"] for part in replay if part["type"] == "text")
     assert replay_text.count(f"[image: {large}]") == 1
 
 
-def test_save_turn_keeps_image_placeholder_without_meta() -> None:
+def test_save_turn_keeps_image_without_meta() -> None:
     loop = _mk_loop()
     session = Session(key="test:image-no-meta")
     block = RuntimeContextBlock(source="test", content="provider context")
@@ -655,12 +655,12 @@ def test_save_turn_keeps_image_placeholder_without_meta() -> None:
         skip=0,
     )
     assert session.messages[0]["content"] == [
-        {"type": "text", "text": "[image]"},
+        {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
         {"type": "text", "text": "provider context"},
     ]
 
 
-def test_save_turn_redacts_tool_image_without_truncating_text() -> None:
+def test_save_turn_keeps_tool_image_and_text() -> None:
     loop = _mk_loop()
     session = Session(key="test:tool-image")
     text = "start-" + ("x" * 20_000) + "-end"
@@ -695,7 +695,7 @@ def test_save_turn_redacts_tool_image_without_truncating_text() -> None:
     )
 
     assert session.messages[1]["content"] == [
-        {"type": "text", "text": "[image: media/photo.png]"},
+        {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}, "_meta": {"path": "media/photo.png"}},
         {"type": "text", "text": text},
     ]
 

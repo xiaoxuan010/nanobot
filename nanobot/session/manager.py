@@ -23,6 +23,7 @@ from nanobot.session.model_selection import SESSION_MODEL_PRESET_METADATA_KEY
 from nanobot.session.summary import SUMMARY_CONTINUATION_TEXT, is_summary_checkpoint
 from nanobot.session.types import PARENT_SESSION_KEY, SESSION_TYPE_KEY, SessionTypes
 from nanobot.utils.helpers import (
+    build_user_image_content,
     content_with_media_breadcrumbs,
     estimate_message_tokens,
     find_legal_message_start,
@@ -267,16 +268,9 @@ class Session:
             role = message.get("role")
             if role == "assistant" and isinstance(content, str):
                 content = _sanitize_assistant_replay_text(content)
-            # Synthesize an ``[image: path]`` breadcrumb from the persisted
-            # ``media`` kwarg so LLM replay still sees *something* where the
-            # image used to be. Without this, an image-only user turn
-            # replays as an empty user message — the assistant's reply then
-            # looks like it's responding to nothing.
-            content = content_with_media_breadcrumbs(
-                role,
-                content,
-                message.get("media"),
-            )
+            if role == "user" and isinstance(content, str) and message.get("media"):
+                content = build_user_image_content(content, message["media"])
+            content = content_with_media_breadcrumbs(role, content, message.get("media"))
             if self.key.startswith("napcat:") and isinstance(content, str):
                 content = shorten_image_references(content)
             elif self.key.startswith("napcat:") and isinstance(content, list):

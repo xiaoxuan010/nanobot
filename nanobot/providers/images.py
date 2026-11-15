@@ -1,4 +1,4 @@
-"""Prepare inline image copies within a shared provider request byte budget."""
+"""Prepare inline image copies with stable per-image compression."""
 
 from __future__ import annotations
 
@@ -13,8 +13,6 @@ from typing import Any, cast
 
 from loguru import logger
 from PIL import Image, ImageOps, ImageSequence
-
-from nanobot.utils.helpers import SMALL_INLINE_IMAGE_BYTES
 
 # A soft transport target, including base64 expansion, rather than an API size limit.
 INLINE_IMAGE_BYTE_BUDGET = 1_000_000
@@ -138,7 +136,7 @@ def _prepare_images(body: dict[str, Any], max_side: int) -> dict[str, Any]:
         finally:
             original_sizes.append(size)
     total_bytes = sum(len(image.url) for image in blocks)
-    if total_bytes > INLINE_IMAGE_BYTE_BUDGET:
+    if any(len(block.url) > INLINE_IMAGE_BYTE_BUDGET for block in blocks):
         prepared = _prepare_copies(prepared, total_bytes)
         blocks = list(_inline_images(prepared))
     for block, original_size, original_url in reversed(list(zip(blocks, original_sizes, original_urls))):
@@ -161,7 +159,7 @@ def _prepare_copies(body: dict[str, Any], total_bytes: int) -> dict[str, Any]:
     copies: list[_ImageCopy] = []
     try:
         for block in blocks:
-            if len(block.url) <= SMALL_INLINE_IMAGE_BYTES:
+            if len(block.url) <= INLINE_IMAGE_BYTE_BUDGET:
                 continue
             try:
                 raw = base64.b64decode(block.url.split(";base64,", 1)[1], validate=True)
@@ -181,23 +179,18 @@ def _prepare_copies(body: dict[str, Any], total_bytes: int) -> dict[str, Any]:
             except (ValueError, OSError, Image.DecompressionBombError) as exc:
                 logger.info("Inline image preparation skipped: type={}", type(exc).__name__)
 
-        # Re-encode at the original resolution first. Bound quality loss and any later scaling.
-        copies.sort(key=lambda image: image.original_bytes, reverse=True)
-        sent_bytes = total_bytes
-        for quality, scale in ((85, 1.0), (75, 1.0), (65, 1.0), (65, 0.85), (65, 0.75)):
-            for image in copies:
-                before_bytes = len(image.target.url)
+        # Compress each image independently so later images cannot change earlier payloads.
+        for image in copies:
+            for quality, scale in ((85, 1.0), (75, 1.0), (65, 1.0), (65, 0.85), (65, 0.75)):
                 image.encode(quality, scale)
-                sent_bytes += len(image.target.url) - before_bytes
-                if sent_bytes <= INLINE_IMAGE_BYTE_BUDGET:
+                if len(image.target.url) <= INLINE_IMAGE_BYTE_BUDGET:
                     break
-            if sent_bytes <= INLINE_IMAGE_BYTE_BUDGET:
-                break
+        sent_bytes = sum(len(image.url) for image in blocks)
         logger.info(
             "Inline images prepared: count={} encoded_bytes_before={} "
             "encoded_bytes_after={} budget={} budget_met={} images={}",
             len(blocks), total_bytes, sent_bytes, INLINE_IMAGE_BYTE_BUDGET,
-            sent_bytes <= INLINE_IMAGE_BYTE_BUDGET,
+            all(len(image.url) <= INLINE_IMAGE_BYTE_BUDGET for image in blocks),
             [{
                 "before_size": image.source.size, "after_size": image.sent_size,
                 "before_bytes": image.original_bytes, "after_bytes": image.sent_bytes,

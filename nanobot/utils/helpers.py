@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import mimetypes
 import re
 import shutil
 import time
@@ -342,16 +343,27 @@ def detect_image_mime(data: bytes) -> str | None:
     return None
 
 
-SMALL_INLINE_IMAGE_BYTES = 64_000
-
-
 def build_inline_image_block(raw: bytes, mime: str, path: str) -> dict[str, Any]:
-    """Keep original references and mark small image previews for history replay."""
+    """Build an inline image with its original reference."""
     url = f"data:{mime};base64,{base64.b64encode(raw).decode()}"
-    meta: dict[str, Any] = {"path": path}
-    if len(url) <= SMALL_INLINE_IMAGE_BYTES:
-        meta["retain_preview"] = True
-    return {"type": "image_url", "image_url": {"url": url}, "_meta": meta}
+    return {"type": "image_url", "image_url": {"url": url}, "_meta": {"path": path}}
+
+
+def build_user_image_content(text: str, image_paths: list[str] | None) -> str | list[dict[str, Any]]:
+    """Build the same image content for fresh input and history replay."""
+    blocks: list[dict[str, Any]] = []
+    for path in image_paths or []:
+        p = Path(path)
+        if not p.is_file():
+            continue
+        raw = p.read_bytes()
+        mime = detect_image_mime(raw) or mimetypes.guess_type(path)[0]
+        if not mime or not mime.startswith("image/"):
+            continue
+        if not image_path_in_text(str(p), text):
+            blocks.append({"type": "text", "text": image_placeholder_text(str(p))})
+        blocks.append(build_inline_image_block(raw, mime, str(p)))
+    return blocks + [{"type": "text", "text": text}] if blocks else text
 
 
 def build_image_content_blocks(
@@ -816,6 +828,8 @@ def estimate_message_tokens(message: dict[str, Any]) -> int:
                 text = part.get("text", "")
                 if isinstance(text, str) and text:
                     parts.append(text)
+            elif part is not None and part.get("type") in {"image_url", "input_image"}:
+                continue
             else:
                 parts.append(json.dumps(raw_part, ensure_ascii=False))
     elif content is not None:

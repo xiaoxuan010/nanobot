@@ -35,6 +35,7 @@ from nanobot.utils.helpers import (
     content_with_media_breadcrumbs,
     ensure_dir,
     estimate_prompt_tokens_chain,
+    image_placeholder_text,
     strip_think,
     truncate_text,
     truncate_text_to_tokens,
@@ -632,6 +633,17 @@ class MemoryStore:
                 message.get("content", ""),
                 message.get("media"),
             )
+            if isinstance(content, list):
+                parts: list[str] = []
+                for raw_item in cast(list[object], content):
+                    if not isinstance(raw_item, dict):
+                        continue
+                    item = cast(dict[str, Any], raw_item)
+                    if item.get("type") == "text":
+                        parts.append(str(item.get("text", "")))
+                    elif item.get("type") == "image_url":
+                        parts.append(image_placeholder_text(cast(str | None, item.get("_meta", {}).get("path"))))
+                content = "\n".join(parts)
             if not content:
                 continue
             tools_used = message.get("tools_used")
