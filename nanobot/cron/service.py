@@ -145,7 +145,7 @@ def _persistable_origin_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
     """Return a detached JSON-safe routing snapshot for a cron payload."""
     snapshot: dict[str, Any] = {}
     for key, value in metadata.items():
-        if key == RUNTIME_CONTEXT_INPUT_META:
+        if key in (RUNTIME_CONTEXT_INPUT_META, "context_metadata", "_napcat_observation"):
             continue
         try:
             snapshot[key] = json.loads(json.dumps(value, ensure_ascii=False, allow_nan=False))

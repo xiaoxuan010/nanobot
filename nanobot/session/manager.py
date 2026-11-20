@@ -313,9 +313,14 @@ class Session:
                 if not any(key in message for key in ("tool_calls", "reasoning_content", "thinking_blocks")):
                     continue
             entry: dict[str, Any] = {"role": message["role"], "content": content}
-            for key in ("tool_calls", "tool_call_id", "name", "reasoning_content", "thinking_blocks", "context_metadata"):
+            for key in ("tool_calls", "tool_call_id", "name", "reasoning_content", "thinking_blocks"):
                 if key in message:
                     entry[key] = message[key]
+            if "context_metadata" in message:
+                metadata = message["context_metadata"]
+                if message.get("_cron_turn") and "napcat_observation" in metadata:
+                    metadata = {key: value for key, value in metadata.items() if key != "napcat_observation"}
+                entry["context_metadata"] = metadata
             out.append(entry)
 
         if max_tokens > 0 and out:
