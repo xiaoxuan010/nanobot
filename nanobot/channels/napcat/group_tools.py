@@ -194,6 +194,7 @@ _DESCRIPTIONS = {
     "send_voice": "Synthesize text with the configured voice and send one native voice message to the active QQ group. Optionally give a speaking-style instruction. A successful result confirms the QQ send receipt.",
     "reply_message": "Reply to an observed or retrieved message in the active QQ group. The message_id may include or omit a leading #.",
     "react_message": "Add an emoji reaction to an observed or retrieved group message.",
+    "recall_message": "Recall one message observed, retrieved, or sent in the active QQ group during this turn. The message_id may include or omit a leading #.",
     "poke_user": "Poke a user observed in the active QQ group.",
     "stay_silent": "End this response without another visible action. Previously completed actions remain.",
     "get_message": "Retrieve a message from NapCat by ID. The message must belong to this group.",
@@ -245,7 +246,7 @@ class QQGroupTool(Tool):
                 "instruction": {"type": "string", "description": "Optional speaking style, emotion or delivery instruction for synthesis."},
             })
             required.append("text")
-        if self.name in {"reply_message", "react_message", "get_message", "get_voice_transcript"}:
+        if self.name in {"reply_message", "react_message", "recall_message", "get_message", "get_voice_transcript"}:
             fields["message_id"] = {"type": "string"}
             required.append("message_id")
         if self.name == "react_message":
@@ -332,6 +333,13 @@ class QQGroupTool(Tool):
                 "message_id": args["message_id"], "emoji_id": args["emoji_id"], "set": True,
             })
             result = {"status": "succeeded"}
+        elif self.name == "recall_message":
+            message_id = args["message_id"].removeprefix("#")
+            message = self.run.messages.get(message_id)
+            if message_id not in self.run.sent_ids and (message is None or not message.targetable):
+                raise ValueError("Read a targetable message in this group before recalling it")
+            await self.run.call("delete_msg", {"message_id": message_id})
+            result = {"status": "succeeded", "message_id": message_id}
         elif self.name == "poke_user":
             if args["user_id"] not in self.run.users:
                 raise ValueError("Poke target has not been observed in this group")
