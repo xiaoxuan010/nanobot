@@ -127,7 +127,9 @@ class GroupRun:
             messages.append(message)
         return messages
 
-    async def send(self, content: str, media: list[str], reply: str, mentions: list[str]) -> dict[str, Any]:
+    async def send(
+        self, content: str, media: list[str], reply: str, mentions: list[str], *, files: list[str],
+    ) -> dict[str, Any]:
         segments: list[dict[str, Any]] = []
         if reply:
             if reply not in self.messages and reply not in self.sent_ids and reply.startswith("#"):
@@ -160,8 +162,14 @@ class GroupRun:
             if image is None:
                 raise ValueError("Attachment could not be converted to a QQ image")
             segments.append(image)
-        if not text and not media:
-            raise ValueError("A message requires content or media")
+        for ref in files:
+            file = resolve_workspace_path(ref, context.workspace, access.allowed_root)
+            data = await asyncio.to_thread(file.read_bytes)
+            segments.append({
+                "type": "file", "data": {"file": "base64://" + base64.b64encode(data).decode(), "name": file.name},
+            })
+        if not text and not media and not files:
+            raise ValueError("A message requires text, images, or files")
         return await self._send_segments(segments)
 
     async def send_voice(self, text: str, instruction: str | None) -> dict[str, Any]:
@@ -190,7 +198,7 @@ class GroupRun:
 
 
 _DESCRIPTIONS = {
-    "send_message": "Send a message to the active QQ group, optionally with images and mentions.",
+    "send_message": "Send text, images, or files to the active QQ group, with optional mentions.",
     "send_voice": "Synthesize text with the configured voice and send one native voice message to the active QQ group. Optionally give a speaking-style instruction. A successful result confirms the QQ send receipt.",
     "reply_message": "Reply to an observed or retrieved message in the active QQ group. The message_id may include or omit a leading #.",
     "react_message": "Add an emoji reaction to an observed or retrieved group message.",
@@ -231,9 +239,13 @@ class QQGroupTool(Tool):
             fields.update({
                 "content": {
                     "type": "string",
-                    "description": "要实际发送到 QQ 群的文字。你在工具调用之外直接写出的文字不会发送到群里。",
+                    "description": "要实际发送到 QQ 群的文字。只发附件时传空字符串。你在工具调用之外直接写出的文字不会发送到群里。",
                 },
-                "media": {"type": "array", "items": {"type": "string"}},
+                "media": {"type": "array", "items": {"type": "string"}, "description": "图片路径或图片 URL。"},
+                "files": {
+                    "type": "array", "items": {"type": "string"},
+                    "description": "要作为 QQ 文件附件发送的本地文件路径。安装包、压缩包、文档等普通文件用此参数。若只有下载链接，先下载到工作区。",
+                },
                 "mentions": {"type": "array", "items": {"type": "string"}},
             })
             required.append("content")
@@ -323,6 +335,7 @@ class QQGroupTool(Tool):
                 args["content"], args.get("media", []),
                 args.get("message_id", "") if self.name == "reply_message" else "",
                 args.get("mentions", []),
+                files=args.get("files", []),
             )
         elif self.name == "react_message":
             if args["message_id"] not in self.run.messages and args["message_id"] not in self.run.sent_ids:
