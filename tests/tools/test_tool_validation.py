@@ -399,10 +399,7 @@ def test_exec_guard_blocks_home_path_outside_workspace(tmp_path) -> None:
     tool = ExecTool(restrict_to_workspace=True)
     error = tool._guard_command("cat ~/.nanobot/config.json", str(tmp_path))
     assert error is not None
-    assert error.startswith(
-        "Error: Command blocked by safety guard (path outside working dir)"
-    )
-    assert "hard policy boundary" in error
+    assert error.startswith("Command blocked.")
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Unix resolves named homes through passwd")
@@ -422,8 +419,7 @@ async def test_exec_rejects_unknown_user_home(tmp_path, monkeypatch, command) ->
         working_dir=str(tmp_path), restrict_to_workspace=True,
     ).execute(command=command)
 
-    assert result.startswith("Error: Command blocked by safety guard (path outside working dir)")
-    assert "hard policy boundary" in result
+    assert result.startswith("Command blocked. Could not resolve path reference ")
     spawn.assert_not_called()
 
 
@@ -447,8 +443,7 @@ async def test_exec_rejects_home_path_without_home_directory(tmp_path, monkeypat
         working_dir=str(tmp_path), restrict_to_workspace=True,
     ).execute(command="cat ~/file.txt")
 
-    assert result.startswith("Error: Command blocked by safety guard (path outside working dir)")
-    assert "hard policy boundary" in result
+    assert result.startswith("Command blocked. Could not resolve path reference ")
     spawn.assert_not_called()
 
 
@@ -476,9 +471,7 @@ def test_exec_guard_blocks_home_paths_outside_workspace(tmp_path, command) -> No
     tool = ExecTool(restrict_to_workspace=True)
     error = tool._guard_command(command, str(tmp_path))
     assert error is not None
-    assert error.startswith(
-        "Error: Command blocked by safety guard (path outside working dir)"
-    )
+    assert error.startswith("Command blocked.")
 
 
 @pytest.mark.parametrize(
@@ -495,9 +488,7 @@ def test_exec_guard_blocks_home_paths_with_special_shell_contexts(
 ) -> None:
     error = ExecTool(restrict_to_workspace=True)._guard_command(command, str(tmp_path))
     assert error is not None
-    assert error.startswith(
-        "Error: Command blocked by safety guard (path outside working dir)"
-    )
+    assert error.startswith("Command blocked.")
 
 
 def test_exec_guard_allows_current_directory_tilde(tmp_path) -> None:
@@ -509,10 +500,7 @@ def test_exec_guard_blocks_quoted_home_path_outside_workspace(tmp_path) -> None:
     tool = ExecTool(restrict_to_workspace=True)
     error = tool._guard_command('cat "~/.nanobot/config.json"', str(tmp_path))
     assert error is not None
-    assert error.startswith(
-        "Error: Command blocked by safety guard (path outside working dir)"
-    )
-    assert "hard policy boundary" in error
+    assert error.startswith("Command blocked.")
 
 
 def test_exec_guard_allows_media_path_outside_workspace(tmp_path, monkeypatch) -> None:
@@ -565,10 +553,7 @@ def test_exec_guard_blocks_windows_drive_root_outside_workspace(monkeypatch) -> 
     tool = ExecTool(restrict_to_workspace=True)
     error = tool._guard_command("dir E:\\", "E:\\workspace")
     assert error is not None
-    assert error.startswith(
-        "Error: Command blocked by safety guard (path outside working dir)"
-    )
-    assert "hard policy boundary" in error
+    assert error.startswith("Command blocked.")
 
 
 def test_exec_guard_allows_dev_null_redirect(tmp_path) -> None:
@@ -590,7 +575,7 @@ def test_exec_guard_blocks_non_benign_dev_path(tmp_path) -> None:
     tool = ExecTool(restrict_to_workspace=True)
     error = tool._guard_command("cat /dev/sda", str(tmp_path))
     assert error is not None
-    assert "path outside working dir" in error
+    assert "Path '/dev/sda' is outside the allowed roots for exec" in error
 
 
 def test_exec_extract_absolute_paths_ignores_pipe_tilde() -> None:
@@ -1206,7 +1191,7 @@ def test_exec_guard_rejects_unresolvable_home_path(tmp_path, monkeypatch, comman
     tool = ExecTool(restrict_to_workspace=True)
     error = tool._guard_command(command, str(tmp_path))
     assert error is not None
-    assert error.startswith("Error: Command blocked by safety guard (path outside working dir)")
+    assert error.startswith("Command blocked. Could not resolve path reference ")
 
 
 def test_exec_guard_allows_resolved_home_inside_workspace(tmp_path, monkeypatch) -> None:

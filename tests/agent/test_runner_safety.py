@@ -74,7 +74,7 @@ def test_is_ssrf_violation_recognizes_private_url_blocks():
 
     # Workspace-bound markers are NOT classified as SSRF.
     assert is_ssrf_violation(
-        "Error: Command blocked by safety guard (path outside working dir)"
+        "Command blocked. Path '/outside/report.txt' is outside the allowed roots for exec: '/workspace'."
     ) is False
     assert is_ssrf_violation(
         "Path /tmp/x is outside allowed directory /ws"
@@ -160,7 +160,7 @@ async def test_runner_lets_llm_recover_from_shell_guard_path_outside():
     tools.get_definitions.return_value = []
     tools.execute = AsyncMock(
         return_value=ToolResult.error(
-            "Error: Command blocked by safety guard (path outside working dir)"
+            "Command blocked. Path '/outside/report.txt' is outside the allowed roots for exec: '/workspace'."
         )
     )
 
@@ -195,8 +195,9 @@ async def test_runner_lets_llm_recover_from_shell_guard_path_outside():
     ]
     assert len(rejections) == 1
     assert rejections[0]["name"] == "exec"
-    assert "Command blocked by safety guard (path outside working dir)" in rejections[0]["content"]
-    assert "Consider this result in the context of the user's goal" in rejections[0]["content"]
+    assert rejections[0]["content"] == (
+        "Command blocked. Path '/outside/report.txt' is outside the allowed roots for exec: '/workspace'."
+    )
 
 
 @pytest.mark.asyncio
@@ -227,7 +228,7 @@ async def test_runner_throttles_repeated_workspace_bypass_attempts():
     tools.get_definitions.return_value = []
     tools.execute = AsyncMock(
         return_value=ToolResult.error(
-            "Error: Command blocked by safety guard (path outside working dir)"
+            "Command blocked. Path '/outside/report.txt' is outside the allowed roots for exec: '/workspace'."
         )
     )
 

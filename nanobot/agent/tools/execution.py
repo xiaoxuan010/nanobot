@@ -44,8 +44,9 @@ _WORKSPACE_VIOLATION_MARKERS: tuple[str, ...] = (
     "outside the configured workspace",
     "outside allowed directory",
     "working_dir is outside",
-    "working_dir could not be resolved",
-    "path outside working dir",
+    "could not resolve working_dir",
+    "outside the allowed roots for exec",
+    "under workspace restrictions. use an absolute path",
     "path traversal detected",
 )
 
@@ -303,6 +304,8 @@ def _classify_violation(
                 raw_text,
             )
             return escalation, event
+        if tool_call.name == "exec" and raw_text.startswith("Command blocked. "):
+            return raw_text, event
         return soft_payload, event
 
     return None

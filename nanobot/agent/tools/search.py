@@ -525,7 +525,10 @@ class FindFilesTool(_SearchTool):
         paths = [item[0] for item in matches]
         paged, truncated = _text_page(paths, limit, offset, self._MAX_RESULT_CHARS)
         if not paged:
-            return "No files found"
+            scope = "in the current workspace" if path in ("", ".") else f"under {str(target)!r}"
+            if matches:
+                return f"No results at offset {offset} {scope}."
+            return f"No matching files found {scope}."
 
         result = "\n".join(paged)
         note = _pagination_note(limit, offset, truncated)

@@ -354,7 +354,7 @@ async def test_exec_3599_regression_rm_with_dev_null_redirect(tmp_path):
         working_dir=str(workspace),
     )
     assert "done" in result
-    assert "path outside working dir" not in result
+    assert "Command blocked." not in result
     assert not target.exists()
 
 
@@ -370,7 +370,7 @@ def test_exec_still_blocks_real_outside_path_via_redirect(tmp_path):
     tool = ExecTool(working_dir=str(workspace), restrict_to_workspace=True)
     blocked = tool._guard_command("echo pwn > /etc/issue", str(workspace))
     assert blocked is not None
-    assert "path outside working dir" in blocked
+    assert "outside the allowed roots for exec" in blocked
 
 
 @pytest.mark.parametrize("backend", ["bwrap", "seatbelt"])
@@ -445,7 +445,7 @@ def test_exec_bind_roots_do_not_widen_guard_without_sandbox(tmp_path):
     )
 
     assert blocked is not None
-    assert "path outside working dir" in blocked
+    assert "outside the allowed roots for exec" in blocked
 
 
 @pytest.mark.parametrize("backend", ["bwrap", "seatbelt"])
@@ -470,7 +470,7 @@ def test_exec_sandbox_bind_parent_does_not_widen_workspace_guard(tmp_path, monke
     )
 
     assert blocked is not None
-    assert "path outside working dir" in blocked
+    assert "outside the allowed roots for exec" in blocked
 
 
 # --- format command blocking -----------------------------------------------
@@ -559,7 +559,9 @@ def test_exec_blocks_outside_paths_from_subdirectory(tmp_path):
         workspace_root=str(workspace),
     )
     assert result is not None
-    assert "path outside working dir" in result
+    assert f"Path {str(outside / 'key.pem')!r} is outside the allowed roots for exec" in result
+    assert repr(str(workspace.resolve())) in result
+    assert repr(str(subdir.resolve())) in result
 
 def test_exec_blocks_outside_paths_with_redirection_and_delimiters(tmp_path):
     workspace = tmp_path / "workspace"
@@ -577,7 +579,7 @@ def test_exec_blocks_outside_paths_with_redirection_and_delimiters(tmp_path):
     ):
         result = tool._guard_command(cmd, str(workspace), workspace_root=str(workspace))
         assert result is not None, f"Expected {cmd} to be blocked"
-        assert "path outside working dir" in result
+        assert "outside the allowed roots for exec" in result
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX symlink and quoting semantics")
@@ -599,7 +601,7 @@ def test_exec_does_not_truncate_parentheses_in_symlink_paths(tmp_path, quoted):
     result = tool._guard_command(command, str(workspace), workspace_root=str(workspace))
 
     assert result is not None
-    assert "path outside working dir" in result
+    assert "outside the allowed roots for exec" in result
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX command substitution semantics")
@@ -617,7 +619,7 @@ def test_exec_checks_leaf_symlink_inside_command_substitution(tmp_path):
     result = tool._guard_command(command, str(workspace), workspace_root=str(workspace))
 
     assert result is not None
-    assert "path outside working dir" in result
+    assert "outside the allowed roots for exec" in result
 
 
 @pytest.mark.parametrize(
@@ -659,7 +661,7 @@ def test_exec_blocks_file_uri_outside_workspace(tmp_path):
     )
 
     assert result is not None
-    assert "path outside working dir" in result
+    assert "outside the allowed roots for exec" in result
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX command substitution semantics")
@@ -677,7 +679,7 @@ def test_exec_checks_file_uri_leaf_symlink_inside_command_substitution(tmp_path)
     result = tool._guard_command(command, str(workspace), workspace_root=str(workspace))
 
     assert result is not None
-    assert "path outside working dir" in result
+    assert "outside the allowed roots for exec" in result
 
 
 def test_exec_keeps_quoted_parenthesis_path_inside_workspace_allowed(tmp_path):
@@ -728,7 +730,7 @@ def test_exec_recursively_checks_compact_shell_command_string(tmp_path):
     result = tool._guard_command(command, str(workspace), workspace_root=str(workspace))
 
     assert result is not None
-    assert "path outside working dir" in result
+    assert "outside the allowed roots for exec" in result
 
 
 def test_exec_malformed_quote_still_extracts_path():
@@ -750,4 +752,4 @@ def test_exec_blocks_double_slash_absolute_paths(tmp_path, path):
     )
 
     assert result is not None
-    assert "path outside working dir" in result
+    assert "outside the allowed roots for exec" in result

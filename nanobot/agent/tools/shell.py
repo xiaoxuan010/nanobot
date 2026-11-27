@@ -80,16 +80,6 @@ def _reap_pid(pid: int) -> None:
         logger.debug("_reap_pid({}): {}", pid, exc)
 
 
-# Policy note appended to recoverable workspace-boundary guard errors.
-_WORKSPACE_BOUNDARY_NOTE = (
-    "\n\nNote: this is a hard policy boundary, not a transient failure. "
-    "Do NOT retry with shell tricks (symlinks, base64 piping, alternative "
-    "tools, working_dir overrides). If the user genuinely needs this "
-    "resource, tell them you cannot reach it under the current "
-    "restrict_to_workspace policy and ask how to proceed."
-)
-
-
 @dataclass(slots=True)
 class _PreparedCommand:
     command: str | list[str]
@@ -391,34 +381,28 @@ class ExecTool(Tool):
             sandbox_restricts_workspace=bool(self.sandbox),
         )
         workspace_root = str(access.project_path) if access.project_path is not None else self.working_dir
-        if working_dir:
-            requested_dir = Path(working_dir).expanduser()
-            cwd = str(
-                requested_dir
-                if requested_dir.is_absolute()
-                else Path(workspace_root or os.getcwd()) / requested_dir
-            )
-        else:
-            cwd = workspace_root or os.getcwd()
-        # Prevent an LLM-supplied working_dir from escaping the configured
-        # workspace when restrict_to_workspace is enabled (#2826). Without
-        # this, a caller can pass working_dir="/etc" and then all absolute
-        # paths under /etc would pass the _guard_command check that anchors
-        # on cwd.
-        if access.restrict_to_workspace and workspace_root:
-            try:
+        cwd = workspace_root or os.getcwd()
+        restricted_root = workspace_root if access.restrict_to_workspace else None
+        try:
+            if working_dir:
+                requested_dir = Path(working_dir).expanduser()
+                cwd = str(requested_dir if requested_dir.is_absolute() else Path(cwd) / requested_dir)
+            # The command path guard allows paths under cwd, so check cwd first.
+            if restricted_root:
                 requested = Path(cwd).expanduser().resolve()
-                resolved_root = Path(workspace_root).expanduser().resolve()
-            except Exception:
-                return ToolResult.error(
-                    "Error: working_dir could not be resolved"
-                    + _WORKSPACE_BOUNDARY_NOTE
-                )
-            if not is_path_within(requested, resolved_root):
-                return ToolResult.error(
-                    "Error: working_dir is outside the configured workspace"
-                    + _WORKSPACE_BOUNDARY_NOTE
-                )
+                resolved_root = Path(restricted_root).expanduser().resolve()
+                if not is_path_within(requested, resolved_root):
+                    return ToolResult.error(
+                        f"Command blocked. working_dir {working_dir!r} is outside the configured workspace "
+                        f"{str(resolved_root)!r}."
+                    )
+        except Exception:
+            if not restricted_root:
+                raise
+            return ToolResult.error(
+                f"Command blocked. Could not resolve working_dir {working_dir!r}. "
+                f"The configured workspace is {restricted_root!r}."
+            )
 
         # Full access is an explicit trust decision. Keep the application-level
         # command guard aligned with the selected access mode instead of
@@ -857,21 +841,18 @@ class ExecTool(Tool):
 
         should_restrict = self.restrict_to_workspace if restrict_to_workspace is None else restrict_to_workspace
         if should_restrict:
-            if "..\\" in cmd or "../" in cmd:
+            if traversal_marker := next((marker for marker in ("..\\", "../") if marker in cmd), None):
                 return ToolResult.error(
-                    "Error: Command blocked by safety guard (path traversal detected)"
-                    + _WORKSPACE_BOUNDARY_NOTE
+                    f"Command blocked. Path traversal detected in the command ({traversal_marker})."
                 )
 
             cwd_path = Path(cwd).resolve()
             resolved_workspace = (
                 Path(workspace_root).expanduser().resolve()
                 if workspace_root
-                else None
+                else cwd_path
             )
-            sandbox_bind_roots = self._active_sandbox_bind_roots(
-                resolved_workspace or cwd_path
-            )
+            sandbox_bind_roots = self._active_sandbox_bind_roots(resolved_workspace)
 
             for raw in self._extract_absolute_paths(cmd):
                 try:
@@ -885,21 +866,19 @@ class ExecTool(Tool):
                     elif expanded.startswith("~+/"):
                         p = (cwd_path / expanded[3:]).resolve()
                     elif re.match(r"^~(?:-|[+-]\d+)(?:/|$)", expanded):
-                        return ToolResult.error(
-                            "Error: Command blocked by safety guard "
-                            "(path outside working dir)"
-                            + _WORKSPACE_BOUNDARY_NOTE
-                        )
+                        p = None
                     else:
                         try:
-                            home_path = Path(expanded).expanduser()
+                            p = Path(expanded).expanduser()
                         except RuntimeError:
-                            return ToolResult.error(
-                                "Error: Command blocked by safety guard "
-                                "(path outside working dir)"
-                                + _WORKSPACE_BOUNDARY_NOTE
-                            )
-                        p = home_path.resolve()
+                            p = None
+                        else:
+                            p = p.resolve()
+                    if p is None:
+                        return ToolResult.error(
+                            f"Command blocked. Could not resolve path reference {raw!r} under workspace "
+                            f"restrictions. Use an absolute path under {str(cwd_path)!r} for workspace files."
+                        )
                     # Match against the un-resolved path first.  On Linux,
                     # /dev/stderr is a symlink to /proc/self/fd/2 and
                     # ``Path.resolve()`` would mask the device-file intent.
@@ -912,18 +891,11 @@ class ExecTool(Tool):
                     continue
 
                 media_path = get_media_dir().resolve()
-                allowed = (
-                    is_path_within(p, cwd_path)
-                    or is_path_within(p, media_path)
-                )
-                if not allowed and resolved_workspace is not None:
-                    allowed = is_path_within(p, resolved_workspace)
-                if not allowed and sandbox_bind_roots:
-                    allowed = any(is_path_within(p, root) for root in sandbox_bind_roots)
-                if p.is_absolute() and not allowed:
+                allowed_roots = (cwd_path, media_path, resolved_workspace, *sandbox_bind_roots)
+                if p.is_absolute() and not any(is_path_within(p, root) for root in allowed_roots):
+                    root_list = ", ".join(dict.fromkeys(repr(str(root)) for root in allowed_roots))
                     return ToolResult.error(
-                        "Error: Command blocked by safety guard (path outside working dir)"
-                        + _WORKSPACE_BOUNDARY_NOTE
+                        f"Command blocked. Path {raw!r} is outside the allowed roots for exec: {root_list}."
                     )
 
         return None
