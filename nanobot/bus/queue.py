@@ -28,8 +28,8 @@ EventHandler = Callable[[AgentEvent], Awaitable[None] | None]
 class TimestampedQueue(asyncio.Queue[_ItemT]):
     """FIFO with enqueue timestamps when runtime metrics are enabled."""
 
-    def __init__(self, *, track_age: bool):
-        super().__init__()
+    def __init__(self, maxsize: int = 0, *, track_age: bool):
+        super().__init__(maxsize)
         self._track_age = track_age
         self._enqueued_at: deque[float] = deque()
 

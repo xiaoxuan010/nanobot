@@ -36,6 +36,14 @@ def test_default_e2ee_matches_platform_support() -> None:
     assert MatrixConfig().e2ee_enabled is (sys.platform != "win32")
 
 
+def test_reply_to_message_config() -> None:
+    assert MatrixConfig().reply_to_message is True
+    assert MatrixChannel.default_config()["replyToMessage"] is True
+    config = MatrixConfig.model_validate({"replyToMessage": False})
+    assert config.reply_to_message is False
+    assert config.model_dump(by_alias=True)["replyToMessage"] is False
+
+
 class _DummyTask:
     def __init__(self) -> None:
         self.cancelled = False
@@ -870,7 +878,6 @@ async def test_room_invite_respects_allow_list_when_configured() -> None:
 
 @pytest.mark.asyncio
 async def test_on_sync_invite_fallback_joins_pending_invites() -> None:
-    """_on_sync_invite_fallback joins rooms from sync invite_state for allowed senders."""
     channel = MatrixChannel(
         _make_config(allow_from=["@alice:matrix.org"]), MessageBus()
     )
@@ -889,7 +896,6 @@ async def test_on_sync_invite_fallback_joins_pending_invites() -> None:
 
 @pytest.mark.asyncio
 async def test_on_sync_invite_fallback_skips_when_no_invites() -> None:
-    """_on_sync_invite_fallback is a no-op when sync has no invites."""
     channel = MatrixChannel(
         _make_config(allow_from=["@alice:matrix.org"]), MessageBus()
     )
@@ -906,7 +912,6 @@ async def test_on_sync_invite_fallback_skips_when_no_invites() -> None:
 
 @pytest.mark.asyncio
 async def test_on_sync_invite_fallback_skips_denied_sender() -> None:
-    """_on_sync_invite_fallback respects the allow list."""
     channel = MatrixChannel(
         _make_config(allow_from=["@bob:matrix.org"]), MessageBus()
     )
@@ -1756,8 +1761,9 @@ async def test_on_message_sets_message_id_for_room_level_event() -> None:
     {"event_id": "$user1"},
     {"message_id": "$user1", "event_id": "$older"},
 ])
-async def test_send_adds_in_reply_to_for_room_level_message_id(metadata) -> None:
-    channel = MatrixChannel(_make_config(), MessageBus())
+@pytest.mark.parametrize("reply_to_message", [True, False])
+async def test_send_room_level_reply_respects_config(metadata, reply_to_message) -> None:
+    channel = MatrixChannel(_make_config(reply_to_message=reply_to_message), MessageBus())
     client = _FakeAsyncClient("", "", "", None)
     channel.client = client
 
@@ -1771,7 +1777,11 @@ async def test_send_adds_in_reply_to_for_room_level_message_id(metadata) -> None
     )
 
     content = client.room_send_calls[0]["content"]
-    assert content["m.relates_to"] == {"m.in_reply_to": {"event_id": "$user1"}}
+    assert content["body"] == "Hi"
+    if reply_to_message:
+        assert content["m.relates_to"] == {"m.in_reply_to": {"event_id": "$user1"}}
+    else:
+        assert "m.relates_to" not in content
 
 
 @pytest.mark.asyncio
@@ -1790,8 +1800,11 @@ async def test_send_without_valid_reply_target_stays_top_level(metadata) -> None
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("encrypted", [False, True])
-async def test_send_room_reply_attachment_keeps_source_event(tmp_path, encrypted) -> None:
-    channel = MatrixChannel(_make_config(e2ee_enabled=encrypted), MessageBus())
+@pytest.mark.parametrize("reply_to_message", [True, False])
+async def test_send_room_reply_attachment_respects_config(tmp_path, encrypted, reply_to_message) -> None:
+    channel = MatrixChannel(
+        _make_config(e2ee_enabled=encrypted, reply_to_message=reply_to_message), MessageBus(),
+    )
     client = _FakeAsyncClient("", "", "", None)
     client.rooms["!room:matrix.org"] = SimpleNamespace(encrypted=encrypted)
     channel.client = client
@@ -1806,12 +1819,16 @@ async def test_send_room_reply_attachment_keeps_source_event(tmp_path, encrypted
     assert client.upload_calls[0]["encrypt"] is encrypted
     assert len(client.room_send_calls) == 2
     for call in client.room_send_calls:
-        assert call["content"]["m.relates_to"] == {"m.in_reply_to": {"event_id": "$user"}}
+        if reply_to_message:
+            assert call["content"]["m.relates_to"] == {"m.in_reply_to": {"event_id": "$user"}}
+        else:
+            assert "m.relates_to" not in call["content"]
 
 
 @pytest.mark.asyncio
-async def test_send_prefers_thread_relation_over_plain_reply() -> None:
-    channel = MatrixChannel(_make_config(), MessageBus())
+@pytest.mark.parametrize("reply_to_message", [True, False])
+async def test_send_prefers_thread_relation_over_plain_reply(reply_to_message) -> None:
+    channel = MatrixChannel(_make_config(reply_to_message=reply_to_message), MessageBus())
     client = _FakeAsyncClient("", "", "", None)
     channel.client = client
 
@@ -1889,8 +1906,9 @@ async def test_send_does_not_parse_attachment_marker_without_media(tmp_path) -> 
 
 
 @pytest.mark.asyncio
-async def test_send_passes_thread_relates_to_to_attachment_upload(monkeypatch) -> None:
-    channel = MatrixChannel(_make_config(), MessageBus())
+@pytest.mark.parametrize("reply_to_message", [True, False])
+async def test_send_passes_thread_relates_to_to_attachment_upload(monkeypatch, reply_to_message) -> None:
+    channel = MatrixChannel(_make_config(reply_to_message=reply_to_message), MessageBus())
     client = _FakeAsyncClient("", "", "", None)
     channel.client = client
     channel._server_upload_limit_checked = True
@@ -2125,7 +2143,6 @@ async def test_send_progress_keeps_typing_keepalive_running() -> None:
 
 @pytest.mark.asyncio
 async def test_send_empty_content_does_not_call_room_send() -> None:
-    """Progress messages with empty content must not produce an empty body: '' event."""
     channel = MatrixChannel(_make_config(), MessageBus())
     client = _FakeAsyncClient("", "", "", None)
     channel.client = client
@@ -2144,7 +2161,6 @@ async def test_send_empty_content_does_not_call_room_send() -> None:
 
 @pytest.mark.asyncio
 async def test_send_whitespace_only_content_does_not_call_room_send() -> None:
-    """Progress messages with whitespace-only content must not produce an empty message."""
     channel = MatrixChannel(_make_config(), MessageBus())
     client = _FakeAsyncClient("", "", "", None)
     channel.client = client
@@ -2300,7 +2316,6 @@ async def test_send_keeps_plaintext_only_for_plain_text() -> None:
 
 
 def test_build_matrix_text_content_basic_text() -> None:
-    """Test basic text content without HTML formatting."""
     result = _build_matrix_text_content("Hello, World!")
     expected = {
         "msgtype": "m.text",
@@ -2311,7 +2326,6 @@ def test_build_matrix_text_content_basic_text() -> None:
 
 
 def test_build_matrix_text_content_with_markdown() -> None:
-    """Test text content with markdown that renders to HTML."""
     text = "*Hello* **World**"
     result = _build_matrix_text_content(text)
     assert "msgtype" in result
@@ -2325,7 +2339,6 @@ def test_build_matrix_text_content_with_markdown() -> None:
 
 
 def test_build_matrix_text_content_with_event_id() -> None:
-    """Test text content with event_id for message replacement."""
     event_id = "$8E2XVyINbEhcuAxvxd1d9JhQosNPzkVoU8TrbCAvyHo"
     result = _build_matrix_text_content("Updated message", event_id)
     assert "msgtype" in result
@@ -2337,7 +2350,6 @@ def test_build_matrix_text_content_with_event_id() -> None:
 
 
 def test_build_matrix_text_content_with_event_id_preserves_thread_relation() -> None:
-    """Thread relations for edits should stay inside m.new_content."""
     relates_to = {
         "rel_type": "m.thread",
         "event_id": "$root1",
@@ -2355,7 +2367,6 @@ def test_build_matrix_text_content_with_event_id_preserves_thread_relation() -> 
 
 @pytest.mark.asyncio
 async def test_send_room_content_returns_room_send_response():
-    """Test that _send_room_content returns the response from client.room_send."""
     client = _FakeAsyncClient("", "", "", None)
     channel = MatrixChannel(_make_config(), MessageBus())
     channel.client = client
@@ -2558,8 +2569,11 @@ async def test_send_delta_starts_threaded_stream_inside_thread() -> None:
 
 
 @pytest.mark.asyncio
-async def test_send_delta_threaded_edit_keeps_replace_and_thread_relation(monkeypatch) -> None:
-    channel = MatrixChannel(_make_config(), MessageBus())
+@pytest.mark.parametrize("reply_to_message", [True, False])
+async def test_send_delta_threaded_edit_keeps_replace_and_thread_relation(
+    monkeypatch, reply_to_message,
+) -> None:
+    channel = MatrixChannel(_make_config(reply_to_message=reply_to_message), MessageBus())
     client = _FakeAsyncClient("", "", "", None)
     channel.client = client
     client.room_send_response.event_id = "event-1"
@@ -2579,6 +2593,9 @@ async def test_send_delta_threaded_edit_keeps_replace_and_thread_relation(monkey
     edit_content = client.room_send_calls[1]["content"]
     final_content = client.room_send_calls[2]["content"]
 
+    assert client.room_send_calls[0]["content"]["m.relates_to"] == (
+        edit_content["m.new_content"]["m.relates_to"]
+    )
     assert edit_content["m.relates_to"] == {
         "rel_type": "m.replace",
         "event_id": "event-1",
@@ -2602,8 +2619,9 @@ async def test_send_delta_threaded_edit_keeps_replace_and_thread_relation(monkey
 
 
 @pytest.mark.asyncio
-async def test_send_delta_room_reply_edits_the_bot_event(monkeypatch) -> None:
-    channel = MatrixChannel(_make_config(), MessageBus())
+@pytest.mark.parametrize("reply_to_message", [True, False])
+async def test_send_delta_room_reply_edits_the_bot_event(monkeypatch, reply_to_message) -> None:
+    channel = MatrixChannel(_make_config(reply_to_message=reply_to_message), MessageBus())
     client = _FakeAsyncClient("", "", "", None)
     channel.client = client
     client.room_send_response.event_id = "$bot"
@@ -2616,17 +2634,23 @@ async def test_send_delta_room_reply_edits_the_bot_event(monkeypatch) -> None:
     await channel.send_delta("!source:example.org", "", metadata, stream_end=True)
 
     assert len(client.room_send_calls) == 3
-    assert client.room_send_calls[0]["content"]["m.relates_to"] == {
-        "m.in_reply_to": {"event_id": "$user"},
-    }
+    initial_content = client.room_send_calls[0]["content"]
+    assert initial_content["body"] == "Hello"
+    if reply_to_message:
+        assert initial_content["m.relates_to"] == {"m.in_reply_to": {"event_id": "$user"}}
+    else:
+        assert "m.relates_to" not in initial_content
     for call in client.room_send_calls[1:]:
         assert call["content"]["m.relates_to"] == {
             "rel_type": "m.replace", "event_id": "$bot",
         }
         assert call["content"]["m.new_content"]["body"] == "Hello world"
-        assert call["content"]["m.new_content"]["m.relates_to"] == {
-            "m.in_reply_to": {"event_id": "$user"},
-        }
+        if reply_to_message:
+            assert call["content"]["m.new_content"]["m.relates_to"] == {
+                "m.in_reply_to": {"event_id": "$user"},
+            }
+        else:
+            assert "m.relates_to" not in call["content"]["m.new_content"]
 
 
 @pytest.mark.asyncio
@@ -3192,3 +3216,164 @@ async def test_listen_media_control_command_preserves_discussion(monkeypatch) ->
     await channel._on_message(room, _listen_event("what did we decide?", mentioned=True))
     question = await bus.consume_inbound()
     assert "the picnic is on Sunday" in question.metadata[RUNTIME_CONTEXT_INPUT_META][0].content
+
+
+
+
+@pytest.mark.asyncio
+async def test_on_message_group_policy_override_requires_mentions_in_overridden_room() -> None:
+    channel = MatrixChannel(
+        _make_config(
+            group_policy="open",
+            group_policy_overrides={"!quiet:matrix.org": "mention"},
+        ),
+        MessageBus(),
+    )
+    client = _FakeAsyncClient("", "", "", None)
+    channel.client = client
+
+    handled: list[str] = []
+
+    async def _fake_handle_message(**kwargs) -> None:
+        handled.append(kwargs["sender_id"])
+
+    channel._handle_message = _fake_handle_message  # type: ignore[method-assign]
+
+    quiet_room = SimpleNamespace(
+        room_id="!quiet:matrix.org", display_name="Quiet room", member_count=3
+    )
+    open_room = SimpleNamespace(
+        room_id="!room:matrix.org", display_name="Open room", member_count=3
+    )
+    event = SimpleNamespace(sender="@alice:matrix.org", body="Hello", source={"content": {}})
+
+    await channel._on_message(quiet_room, event)
+    assert handled == []
+    assert client.typing_calls == []
+
+    await channel._on_message(open_room, event)
+    assert handled == ["@alice:matrix.org"]
+    assert client.typing_calls == [("!room:matrix.org", True, TYPING_NOTICE_TIMEOUT_MS)]
+
+
+@pytest.mark.asyncio
+async def test_on_message_group_policy_override_honors_bot_mentions() -> None:
+    channel = MatrixChannel(
+        _make_config(
+            group_policy="open",
+            group_policy_overrides={"!quiet:matrix.org": "mention"},
+        ),
+        MessageBus(),
+    )
+    client = _FakeAsyncClient("", "", "", None)
+    channel.client = client
+
+    handled: list[str] = []
+
+    async def _fake_handle_message(**kwargs) -> None:
+        handled.append(kwargs["sender_id"])
+
+    channel._handle_message = _fake_handle_message  # type: ignore[method-assign]
+
+    room = SimpleNamespace(room_id="!quiet:matrix.org", display_name="Quiet room", member_count=3)
+    event = SimpleNamespace(
+        sender="@alice:matrix.org",
+        body="Hello",
+        source={"content": {"m.mentions": {"user_ids": ["@bot:matrix.org"]}}},
+    )
+
+    await channel._on_message(room, event)
+
+    assert handled == ["@alice:matrix.org"]
+    assert client.typing_calls == [("!quiet:matrix.org", True, TYPING_NOTICE_TIMEOUT_MS)]
+
+
+@pytest.mark.asyncio
+async def test_on_message_group_policy_override_opens_room_under_mention_policy() -> None:
+    channel = MatrixChannel(
+        _make_config(
+            group_policy="mention",
+            group_policy_overrides={"!dev:matrix.org": "open"},
+        ),
+        MessageBus(),
+    )
+    client = _FakeAsyncClient("", "", "", None)
+    channel.client = client
+
+    handled: list[str] = []
+
+    async def _fake_handle_message(**kwargs) -> None:
+        handled.append(kwargs["sender_id"])
+
+    channel._handle_message = _fake_handle_message  # type: ignore[method-assign]
+
+    room = SimpleNamespace(room_id="!dev:matrix.org", display_name="Dev room", member_count=3)
+    event = SimpleNamespace(sender="@alice:matrix.org", body="Hello", source={"content": {}})
+
+    await channel._on_message(room, event)
+
+    assert handled == ["@alice:matrix.org"]
+    assert client.typing_calls == [("!dev:matrix.org", True, TYPING_NOTICE_TIMEOUT_MS)]
+
+
+@pytest.mark.asyncio
+async def test_on_message_group_policy_override_allowlist_uses_group_allow_from() -> None:
+    channel = MatrixChannel(
+        _make_config(
+            group_policy="open",
+            group_allow_from=["!dev:matrix.org"],
+            group_policy_overrides={
+                "!dev:matrix.org": "allowlist",
+                "!secret:matrix.org": "allowlist",
+            },
+        ),
+        MessageBus(),
+    )
+    client = _FakeAsyncClient("", "", "", None)
+    channel.client = client
+
+    handled: list[str] = []
+
+    async def _fake_handle_message(**kwargs) -> None:
+        handled.append(kwargs["sender_id"])
+
+    channel._handle_message = _fake_handle_message  # type: ignore[method-assign]
+
+    event = SimpleNamespace(sender="@alice:matrix.org", body="Hello", source={"content": {}})
+
+    allowed_room = SimpleNamespace(room_id="!dev:matrix.org", member_count=3)
+    await channel._on_message(allowed_room, event)
+    assert handled == ["@alice:matrix.org"]
+
+    denied_room = SimpleNamespace(room_id="!secret:matrix.org", member_count=3)
+    await channel._on_message(denied_room, event)
+    assert handled == ["@alice:matrix.org"]
+    assert client.typing_calls == [("!dev:matrix.org", True, TYPING_NOTICE_TIMEOUT_MS)]
+
+
+@pytest.mark.asyncio
+async def test_on_message_group_policy_override_leaves_direct_rooms_untouched() -> None:
+    channel = MatrixChannel(
+        _make_config(
+            group_policy="open",
+            group_policy_overrides={"!quiet:matrix.org": "mention"},
+        ),
+        MessageBus(),
+    )
+    client = _FakeAsyncClient("", "", "", None)
+    channel.client = client
+
+    handled: list[str] = []
+
+    async def _fake_handle_message(**kwargs) -> None:
+        handled.append(kwargs["sender_id"])
+
+    channel._handle_message = _fake_handle_message  # type: ignore[method-assign]
+
+    room = SimpleNamespace(room_id="!quiet:matrix.org", display_name="Alice & bot", member_count=2)
+    event = SimpleNamespace(sender="@alice:matrix.org", body="Hello", source={"content": {}})
+
+    await channel._on_message(room, event)
+
+    assert handled == ["@alice:matrix.org"]
+    assert client.typing_calls == [("!quiet:matrix.org", True, TYPING_NOTICE_TIMEOUT_MS)]

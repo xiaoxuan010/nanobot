@@ -32,6 +32,9 @@
           "listen": "Escuchar (responder al mencionar)"
         }
       },
+      "groupPolicyOverrides": {
+        "label": "Excepciones de reglas por sala (JSON)"
+      },
       "allowFrom": {
         "label": "Usuarios permitidos"
       },
@@ -65,6 +68,13 @@
         "label": "Menciones de sala",
         "choices": {
           "true": "encendido",
+          "false": "Apagado"
+        }
+      },
+      "replyToMessage": {
+        "label": "Citar al responder",
+        "choices": {
+          "true": "Encendido",
           "false": "Apagado"
         }
       },

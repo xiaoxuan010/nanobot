@@ -1,5 +1,3 @@
-"""Tool for creating, messaging, cancelling, and inspecting session-owned tasks."""
-
 # pyright: reportIncompatibleMethodOverride=false
 
 from __future__ import annotations
@@ -113,15 +111,9 @@ class SubagentTool(Tool):
             "Available selections: " + json.dumps(self._model_options(), ensure_ascii=False)
         )
 
-    def cast_params(self, params: dict[str, Any]) -> dict[str, Any]:
-        casted = super().cast_params(params)
-        if "model_preset" in params:
-            casted["model_preset"] = params["model_preset"]
-        return casted
-
     def validate_params(self, params: dict[str, Any]) -> list[str]:
         errors = super().validate_params(params)
-        if any(error.startswith("model_preset ") for error in errors):
+        if any(error.startswith("model_preset:") for error in errors):
             errors.append(self._model_selection_hint())
         return errors
 
